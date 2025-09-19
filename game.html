@@ -1,375 +1,167 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>철자 게임 – 학생 화면</title>
+  <meta charset="UTF-8">
+  <title>철자 게임</title>
   <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif; }
-    body { margin:0; background:#0f172a; color:#fff; }
-    header { background:#1d4ed8; padding:12px 16px; }
-    header .meta { opacity:.9; font-size:13px; margin-top:4px; }
-
-    /* 게임 영역을 더 넓고 높게 */
-    main { max-width:1280px; margin:20px auto; padding:0 16px; }
-
-    .hud { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .pill { background:#172554; border:1px solid #334155; padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px; }
-    .btn { border:1px solid #64748b; background:#111827; color:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
-    .btn.primary{ background:#2563eb; border-color:#2563eb; }
-    .btn.warn{ background:#991b1b; border-color:#ef4444; }
-    .btn:disabled{ opacity:.6; cursor:not-allowed; }
-
-    /* ▶ 트랙: 높이를 크게, 위아래도 넓게 움직이도록 */
-    .track {
-      position:relative;
-      height:420px;               /* << 기존 대비 크게 */
-      margin:24px 0;
-      border-radius:14px;
-      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-      border:1px solid rgba(255,255,255,.08);
-      overflow:hidden;
+    body {
+      margin: 0;
+      font-family: 'Pretendard', sans-serif;
+      background: #0f172a;
+      color: white;
     }
-    .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.08); }
-
-    .word { position:relative; height:100%; pointer-events:none; }
-    .ch {
-      position:absolute;
-      /* top은 각 글자마다 랜덤 부여 */
-      transform:translateY(-50%);
-      font-size:56px; font-weight:800; letter-spacing:.06em; white-space:pre;
-      text-shadow: 0 2px 6px rgba(0,0,0,.45);
-      will-change: left, top;
+    #track {
+      position: relative;
+      width: 100%;
+      height: 300px; /* 게임 영역 크게 */
+      border-top: 2px solid #334155;
+      border-bottom: 2px solid #334155;
+      margin-top: 40px;
+      overflow: hidden;
     }
+    .letter {
+      position: absolute;
+      font-size: 2.5rem;
+      font-weight: bold;
+      top: 50%;
+      transform: translateY(-50%);
+      white-space: nowrap;
+    }
+    .back-btn {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background:#334155;
+      color:#fff;
+      border:0;
+      padding:8px 12px;
+      border-radius:8px;
+      font-weight:700;
+      cursor:pointer;
+      box-shadow:0 2px 8px rgba(0,0,0,.25);
+      z-index: 1000;
+    }
+    .back-btn:hover{ background:#1f2937; }
 
-    .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
-    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
-    .modal.open { display:flex; }
-    .modal .box { width:min(520px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
-    .row { display:flex; gap:8px; align-items:center; }
-    input[type="text"]{ width:100%; padding:10px 12px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#fff; font-size:16px; }
-    .muted { color:#93a4b5; font-size:12px; }
+    .feedback{
+      position: fixed;
+      top: 22%;
+      left: 50%;
+      transform: translateX(-50%);
+      display:none;
+      padding:12px 20px;
+      border-radius:12px;
+      font-size:2rem;
+      font-weight:800;
+      color:#fff;
+      background:rgba(0,0,0,.6);
+      box-shadow:0 8px 24px rgba(0,0,0,.35);
+      z-index: 1000;
+      user-select:none;
+    }
+    .feedback.show{ display:block; }
+    .feedback.ok{ background: rgba(16,185,129,.9);}  /* 초록 */
+    .feedback.no{ background: rgba(239,68,68,.9);}    /* 빨강 */
   </style>
 </head>
 <body>
-  <header>
-    <div><strong>철자 게임</strong></div>
-    <div id="headerMeta" class="meta">파라미터 인식 중…</div>
-  </header>
+  <button id="backBtn" class="back-btn">처음으로</button>
+  <div id="track"></div>
+  <div id="feedback" class="feedback" aria-live="polite"></div>
 
-  <main>
-    <div class="hud">
-      <span id="authPill" class="pill">인증 대기</span>
-      <span id="cfgPill" class="pill">설정 대기</span>
-      <span class="pill">점수 <span id="score">0</span></span>
-      <span class="pill">라운드 <span id="roundNow">0</span>/<span id="roundTotal">-</span></span>
-      <span class="pill">평균 속도 <span id="speedNow">-</span> px/s</span>
-      <button id="btnAnswer" class="btn primary">정답 입력(Enter)</button>
-      <button id="btnGiveUp" class="btn warn">포기(Esc)</button>
-    </div>
+  <!-- 효과음 -->
+  <audio id="sound-ok" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+  <audio id="sound-no" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
 
-    <div class="track panel" id="track">
-      <div class="guide"></div>
-      <div id="wordEl" class="word"></div>
-    </div>
+  <script>
+    const track = document.getElementById('track');
+    const feedback = document.getElementById('feedback');
+    const soundOk = document.getElementById('sound-ok');
+    const soundNo = document.getElementById('sound-no');
 
-    <div id="status" class="panel">
-      <div id="message">교사가 세션을 시작하면 자동으로 시작합니다.</div>
-      <div class="muted" style="margin-top:6px;">configs/{classId}_{set}를 구독합니다.</div>
-    </div>
-  </main>
+    // 샘플 문제 단어
+    const words = ["banana", "apple", "cherry"];
+    let currentWord = "";
+    let currentLetters = [];
+    let speed = 500; // px/s
+    let rafId = null;
 
-  <!-- 정답 입력 모달 -->
-  <div id="modal" class="modal" aria-hidden="true">
-    <div class="box">
-      <div style="font-weight:800; margin-bottom:8px;">정답 입력</div>
-      <div class="row">
-        <input id="answerInput" type="text" placeholder="철자를 입력 후 Enter" autocomplete="off" />
-        <button id="submitAnswer" class="btn primary">제출</button>
-      </div>
-      <div class="muted" style="margin-top:6px;">Enter 제출 · Esc 닫기</div>
-    </div>
-  </div>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, doc, onSnapshot,
-      collection, addDoc, serverTimestamp, setDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
-    /* ---------- Firebase ---------- */
-    const firebaseConfig = {
-      apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
-      authDomain: "grade-6-english-c17f3.firebaseapp.com",
-      projectId: "grade-6-english-c17f3",
-      storageBucket: "grade-6-english-c17f3.appspot.com",
-      messagingSenderId: "676305839050",
-      appId: "1:676305839050:web:a5399633e7b828883fe533"
-    };
-    const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
-    const auth = getAuth(app);
-
-    /* ---------- URL 파라미터 ---------- */
-    const p = new URLSearchParams(location.search);
-    const classId = p.get("classId") || "";
-    const setId   = p.get("set") || "";
-    const sid     = p.get("sid") || "";
-    const name    = p.get("name") || "제출원";
-    document.getElementById("headerMeta").textContent =
-      `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · ${new Date().toLocaleString("ko-KR")}`;
-
-    /* ---------- DOM ---------- */
-    const track = document.getElementById("track");
-    const wordEl = document.getElementById("wordEl");
-    const scoreEl = document.getElementById("score");
-    const roundNowEl = document.getElementById("roundNow");
-    const roundTotalEl = document.getElementById("roundTotal");
-    const speedNowEl = document.getElementById("speedNow");
-    const msgEl = document.getElementById("message");
-    const modal = document.getElementById("modal");
-    const input = document.getElementById("answerInput");
-
-    /* ---------- 규칙/상수 ---------- */
-    const pointsSeq = [10,8,6,4,2];       // 시도별 점수
-    const OUT_MARGIN = 420;               // 화면 밖으로 충분히 나가게
-    const TOP_PADDING = 36;               // 위아래 여백(글자 겹침 방지)
-    const START_JITTER = 0.45;            // 각 글자 출발 시점 랜덤지연(초)
-
-    /* ---------- 상태 ---------- */
-    let words = [];
-    let rounds = 0;
-    let fastMin = 420, fastMax = 520, minFloor = 140;
-
-    let user = null, running = false;
-    let curIndex = -1, curWord = "", attemptIdx = 0;
-    let totalScore = 0;
-
-    // 속도 스케일(오답/포기 시 10% 감소)
-    let speedScale = 1.0;
-
-    // 글자 오브젝트: {el, side:'L'|'R', speed, startTime, top}
-    let letters = [];
-    let rafId = 0;
-    let startTs = 0;
-    let animFinished = false;   // 이번 문제에서 "한 번" 이동이 끝났는지
-
-    /* ---------- 인증 → 설정 구독 ---------- */
-    onAuthStateChanged(auth, async (u)=>{
-      if (!u){
-        setPill("authPill","익명 인증 중…");
-        try { await signInAnonymously(auth); } catch(e){ console.error(e); setPill("authPill","인증 실패"); }
-        return;
-      }
-      user = u;
-      setPill("authPill","인증 완료");
-      subscribeConfig();
-    });
-
-    function setPill(id, t){ document.getElementById(id).textContent = t; }
-    function docId(){ return `${classId}_${setId}`; }
-
-    function subscribeConfig(){
-      if (!classId || !setId){
-        msgEl.textContent = "URL에 classId, set이 필요합니다. 예) ?classId=6-1&set=lesson1&sid=01&name=민수";
-        return;
-      }
-      onSnapshot(doc(db,"configs",docId()), (snap)=>{
-        if (!snap.exists()){ setPill("cfgPill","설정 없음"); stopAnim(); clearLetters(); running=false; msgEl.textContent="교사 설정 문서가 없습니다."; return; }
-        const cfg = snap.data()||{};
-        words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
-        const reqRounds = Math.max(1, Number(cfg.rounds||1));
-        rounds = Math.min(reqRounds, Math.max(1, words.length)); // 단어 수 초과 방지
-        const sp=cfg.speedBase||{};
-        fastMin = Math.max(160, Number(sp.fastMin||420));  // 초기 속도가 너무 느려지지 않게 상향
-        fastMax = Math.max(fastMin, Number(sp.fastMax||520));
-        minFloor= Math.max(120, Number(sp.minFloor||140));
-        roundTotalEl.textContent = String(rounds);
-
-        setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
-
-        if (!cfg.active){ stopAnim(); clearLetters(); running=false; msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…"; return; }
-        if (!running) startSession();
-      }, (err)=>{ console.error(err); setPill("cfgPill","설정 오류"); });
+    function showFeedback(message, isCorrect){
+      feedback.textContent = message;
+      feedback.classList.remove('ok','no','show');
+      feedback.classList.add(isCorrect ? 'ok' : 'no','show');
+      if(isCorrect){ soundOk.currentTime=0; soundOk.play(); }
+      else { soundNo.currentTime=0; soundNo.play(); }
+      setTimeout(()=> feedback.classList.remove('show'), 1500);
     }
 
-    /* ---------- 세션/문제 진행 ---------- */
-    function startSession(){
-      totalScore = 0; scoreEl.textContent = "0";
-      curIndex = -1; running = true;
-      words = shuffle(words).slice(0, rounds);
-      msgEl.textContent = "게임 시작!";
-      nextProblem(true);
-    }
+    function startWord(word){
+      track.innerHTML = "";
+      currentLetters = [];
 
-    function nextProblem(newRound){
-      if (newRound){
-        curIndex++;
-        if (curIndex >= rounds){ endSession(); return; }
-        roundNowEl.textContent = String(curIndex+1);
-        curWord = String(words[curIndex] || "");
-        attemptIdx = 0;
-        speedScale = 1.0;         // 새 단어 시작 시 초기화
-      } else {
-        // 같은 문제 재시작: 전체 속도 10% 감속 (바닥 보장)
-        speedScale = Math.max(minFloor / fastMax, speedScale * 0.9);
-      }
-      // 평균 속도 표기용은 buildLetters에서 계산
-      buildLetters(curWord);
-      startAnim();
-    }
+      // 글자별 span 생성
+      [...word].forEach((ch, i)=>{
+        const span = document.createElement('span');
+        span.className="letter";
+        span.textContent = ch;
 
-    function buildLetters(word){
-      clearLetters();
-      letters = [];
-      animFinished = false;
+        // 방향 랜덤
+        const fromLeft = Math.random()<0.5;
+        const startX = fromLeft ? -50 : track.clientWidth + 50;
+        const endX = fromLeft ? track.clientWidth + 50 : -50;
 
-      const W = track.clientWidth;
-      const H = track.clientHeight;
+        // Y 좌표도 랜덤
+        const posY = 50 + (Math.random()*60-30);
 
-      for (let i=0; i<word.length; i++){
-        const el = document.createElement("span");
-        el.className = "ch";
-        el.textContent = word[i];
+        span.style.left = startX + "px";
+        span.style.top = posY + "%";
+        track.appendChild(span);
 
-        // 위아래로 넓게 분포하도록 top을 랜덤 (여백 두기)
-        const top = rand(TOP_PADDING, H - TOP_PADDING);
-        el.style.top = top + "px";
-
-        // 시작은 화면 밖
-        el.style.left = "-99999px";
-        wordEl.appendChild(el);
-
-        // 각 글자별 랜덤: 방향/속도/출발지연
-        const side = Math.random() < 0.5 ? "L" : "R";
-        const baseSpeed = rand(fastMin, fastMax);          // px/s
-        const speed = Math.max(minFloor, baseSpeed * speedScale);
-        const startTime = Math.random() * START_JITTER;    // 0 ~ 0.45s
-
-        letters.push({ el, side, speed, startTime, top });
-      }
-
-      // 평균 속도 표시
-      const avg = Math.round(letters.reduce((s,l)=>s+l.speed,0)/Math.max(1,letters.length));
-      speedNowEl.textContent = `${avg}`;
-
-      startTs = performance.now();
-    }
-
-    function clearLetters(){ wordEl.innerHTML=""; letters=[]; }
-
-    /* ---------- 애니메이션(한 번만 이동) ---------- */
-    function startAnim(){ stopAnim(); rafId=requestAnimationFrame(tick); }
-    function stopAnim(){ if (rafId){ cancelAnimationFrame(rafId); rafId=0; } }
-
-    function tick(now){
-      const elapsed = (now - startTs)/1000; // s
-      const W = track.clientWidth;
-
-      let doneCount = 0;
-
-      for (const L of letters){
-        const t = elapsed - L.startTime;
-        if (t <= 0){
-          // 출발 전 대기 위치
-          L.el.style.left = (L.side==="L" ? -OUT_MARGIN : (W + OUT_MARGIN)) + "px";
-          continue;
-        }
-        const d = L.speed * t;
-        let x;
-        if (L.side === "L"){ // 왼→오
-          x = -OUT_MARGIN + d;
-          if (x > W + OUT_MARGIN){ doneCount++; continue; }
-        } else {             // 오→왼
-          x = W + OUT_MARGIN - d;
-          if (x < -OUT_MARGIN){ doneCount++; continue; }
-        }
-        L.el.style.left = x + "px";
-      }
-
-      if (doneCount >= letters.length){
-        // 모든 글자가 화면 밖으로 나가면 이번 라운드 애니메이션 종료(한 번만 이동)
-        animFinished = true;
-        stopAnim();
-        return;
-      }
+        currentLetters.push({el:span, startX, endX, startTime:null, duration: track.clientWidth/speed*1000 });
+      });
 
       rafId = requestAnimationFrame(tick);
     }
 
-    /* ---------- 입력/판정 ---------- */
-    document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
-    document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
-    document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp());
-    window.addEventListener("keydown", (e)=>{
-      if (e.key==="Enter"){ modal.classList.contains("open")?submitAnswer():openModal(); }
-      else if (e.key==="Escape"){ modal.classList.contains("open")?closeModal():handleWrongOrGiveUp(); }
+    function tick(timestamp){
+      let done = true;
+      currentLetters.forEach(l=>{
+        if(!l.startTime) l.startTime = timestamp;
+        const progress = (timestamp-l.startTime)/l.duration;
+        if(progress<1){
+          done=false;
+          const x = l.startX + (l.endX-l.startX)*progress;
+          l.el.style.left = x+"px";
+        } else {
+          l.el.style.left = l.endX+"px";
+        }
+      });
+      if(!done) rafId=requestAnimationFrame(tick);
+    }
+
+    // 정답/오답 시뮬레이션 (Enter = 정답, Esc = 오답)
+    document.addEventListener('keydown', e=>{
+      if(e.key==="Enter"){
+        showFeedback("정답입니다!", true);
+        cancelAnimationFrame(rafId);
+        setTimeout(()=>startWord(words[Math.floor(Math.random()*words.length)]),1000);
+      }
+      if(e.key==="Escape"){
+        showFeedback("틀렸습니다!", false);
+        speed = Math.max(speed*0.9,100);
+        cancelAnimationFrame(rafId);
+        setTimeout(()=>startWord(currentWord),1000);
+      }
     });
 
-    function openModal(){ modal.classList.add("open"); modal.setAttribute("aria-hidden","false"); input.value=""; input.focus(); }
-    function closeModal(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden","true"); }
-    function normalize(s){ return String(s).toLowerCase().replace(/\s+/g,"").trim(); }
+    // 처음으로 버튼
+    document.getElementById('backBtn').addEventListener('click', ()=>{
+      location.href="join.html";
+    });
 
-    async function submitAnswer(){
-      const val=(input.value||"").trim(); if (!val) return;
-      closeModal();
-      const ok = normalize(val)===normalize(curWord);
-      if (ok){
-        const pts = pointsSeq[Math.min(attemptIdx, pointsSeq.length-1)];
-        totalScore += pts; scoreEl.textContent=String(totalScore);
-        await log({isCorrect:true, points:pts});
-        nextProblem(true);
-      } else {
-        await handleWrongOrGiveUp(); // 오답도 포기와 동일하게 10% 감속 후 재시작
-      }
-    }
-
-    async function handleWrongOrGiveUp(){
-      await log({isCorrect:false, points:0});
-      attemptIdx++;
-      if (attemptIdx >= pointsSeq.length){
-        msgEl.textContent = "정답: " + curWord;
-        await sleep(900);
-        nextProblem(true);
-      } else {
-        nextProblem(false); // 같은 단어, 10% 감속하여 "다시 한 번" 이동
-      }
-    }
-
-    /* ---------- 결과 저장/세션 종료 ---------- */
-    async function log({isCorrect, points}){
-      try{
-        await addDoc(collection(db,"results"), {
-          classId, set:setId, sid, name,
-          word: curWord,
-          attemptIndex: attemptIdx,
-          isCorrect: !!isCorrect,
-          points: Number(points||0),
-          avgSpeed: Math.round(letters.reduce((s,l)=>s+l.speed,0)/Math.max(1,letters.length)),
-          createdAt: serverTimestamp()
-        });
-      }catch(e){ console.error("save result error", e); }
-    }
-
-    async function endSession(){
-      running=false; stopAnim(); clearLetters();
-      msgEl.textContent = "세트 종료! 총점: " + totalScore;
-      try{
-        await setDoc(doc(db,"sessions",[classId,setId,sid,Date.now()].join("_")), {
-          classId, set:setId, sid, name,
-          totalPoints: totalScore,
-          rounds,
-          finishedAt: serverTimestamp()
-        });
-      }catch(e){ console.error("session save error", e); }
-    }
-
-    /* ---------- 유틸 ---------- */
-    function rand(a,b){ return a + Math.random()*(b-a); }
-    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]];} return x; }
-    const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+    // 시작
+    currentWord = words[0];
+    startWord(currentWord);
   </script>
 </body>
 </html>
