@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>철자 게임 — 교사용 대시보드</title>
+<style>
+  :root{--border:#e2e8f0;--ink:#0f172a;--muted:#64748b;--bg:#fff;--pill:#f1f5f9;--accent:#111827}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--ink);background:#fff}
+  header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:#fafafa}
+  header h1{font-size:16px;margin:0;font-weight:800}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  input,select{padding:8px 10px;border:1px solid var(--border);border-radius:10px}
+  button{appearance:none;border:1px solid #cbd5e1;background:#fff;color:#111827;padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:700}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;font-size:14px}
+  th{background:#f8fafc}
+  .pill{font-size:12px;background:var(--pill);border-radius:999px;padding:4px 8px;margin-right:6px}
+  .muted{color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>철자 게임 — 교사용 대시보드</h1>
+  <div class="muted" id="status">연결 중…</div>
+</header>
+
+<div class="wrap">
+  <div class="row">
+    <input id="classId" placeholder="반(ex. 3-2)" />
+    <input id="set" placeholder="세트(ex. lesson1)" />
+    <button class="primary" id="btnApply">필터 적용</button>
+    <button id="btnExport">CSV 내보내기</button>
+  </div>
+
+  <div class="row">
+    <span class="pill" id="pillSummary">—</span>
+  </div>
+
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>시간</th><th>반</th><th>번호</th><th>이름</th><th>세트</th><th>단어</th><th>정답</th><th>소요(ms)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+import { getFirestore, collection, query, where, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+
+/* === firebaseConfig (당신 프로젝트 값 반영) === */
+const firebaseConfig = {
+  apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
+  authDomain: "grade-6-english-c17f3.firebaseapp.com",
+  projectId: "grade-6-english-c17f3",
+  storageBucket: "grade-6-english-c17f3.appspot.com",
+  messagingSenderId: "676305839050",
+  appId: "1:676305839050:web:a5399633e7b828883fe533"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = (id)=>document.getElementById(id);
+const statusEl = $("status");
+const url = new URL(location.href);
+const qp = Object.fromEntries(url.searchParams.entries());
+$("classId").value = qp.classId || "";
+$("set").value = qp.set || "";
+
+let unsub = null;
+
+function formatTime(ts){
+  if(!ts) return "-";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleString();
+}
+
+function apply(){
+  const cid = $("classId").value.trim();
+  const set = $("set").value.trim();
+  if(!cid) { alert("반(classId)을 입력하세요."); return; }
+
+  if(typeof unsub === "function") unsub();
+
+  const col = collection(db, "results");
+  let q = query(col, where("classId","==",cid), orderBy("createdAt","desc"), limit(500));
+  if(set) q = query(col, where("classId","==",cid), where("set","==",set), orderBy("createdAt","desc"), limit(500));
+
+  const tbody = $("tbl").querySelector("tbody");
+  unsub = onSnapshot(q, (snap)=>{
+    tbody.innerHTML = "";
+    let total=0, correct=0;
+    snap.forEach(doc=>{
+      const r = doc.data();
+      total++; if(r.correct) correct++;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${formatTime(r.createdAt)}</td>
+        <td>${r.classId||"-"}</td>
+        <td>${r.studentId||"-"}</td>
+        <td>${r.name||"-"}</td>
+        <td>${r.set||"-"}</td>
+        <td>${r.word||"-"}</td>
+        <td>${r.correct ? "O" : "X"}</td>
+        <td>${r.durationMs ?? "-"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    const rate = total ? Math.round(correct/total*100) : 0;
+    $("pillSummary").textContent = `총 ${total}건 · 정답 ${correct}건 (${rate}%)`;
+    statusEl.textContent = `실시간 수신: ${total}건`;
+  }, (err)=>{
+    console.error(err);
+    statusEl.textContent = "구독 오류";
+  });
+}
+
+$("btnApply").addEventListener("click", apply);
+
+$("btnExport").addEventListener("click", ()=>{
+  const rows = [["time","classId","studentId","name","set","word","correct","durationMs"]];
+  const trs = $("tbl").querySelectorAll("tbody tr");
+  trs.forEach(tr=>{
+    const tds = [...tr.children].map(td=> `"${String(td.textContent).replace(/"/g,'""')}"`);
+    rows.push(tds);
+  });
+  const csv = rows.map(r=>r.join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "results.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+onAuthStateChanged(auth, (u)=>{
+  if(u){ statusEl.textContent = "Firebase 연결됨 🔌"; if($("classId").value) apply(); }
+});
+signInAnonymously(auth).catch(e=>{ statusEl.textContent = "익명 로그인 실패"; console.error(e); });
+</script>
+</body>
+</html>
