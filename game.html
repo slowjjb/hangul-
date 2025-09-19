@@ -18,7 +18,6 @@
     .btn.warn{ background:#991b1b; border-color:#ef4444; }
     .btn:disabled{ opacity:.6; cursor:not-allowed; }
 
-    /* 트랙 */
     .track { position:relative; height:120px; margin:24px 0; border-radius:14px;
       background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
       border:1px solid rgba(255,255,255,.08);
@@ -26,7 +25,7 @@
     }
     .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.1); }
 
-    /* 글자 컨테이너: 안에 span.ch 여러 개가 들어감 */
+    /* 글자들은 모두 여기(.word) 안에 개별 span으로 렌더링 */
     .word { position:absolute; inset:0; pointer-events:none; }
     .ch {
       position:absolute;
@@ -34,7 +33,7 @@
       transform:translateY(-50%);
       font-size:42px; font-weight:800; letter-spacing:.06em; white-space:pre;
       text-shadow: 0 2px 6px rgba(0,0,0,.45);
-      will-change: transform, left;
+      will-change: left, transform;
     }
 
     .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
@@ -65,7 +64,6 @@
 
     <div class="track panel" id="track">
       <div class="guide"></div>
-      <!-- 글자들이 여기에 개별 span으로 렌더링 됩니다 -->
       <div id="wordEl" class="word"></div>
     </div>
 
@@ -90,7 +88,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, doc, getDoc, onSnapshot,
+      getFirestore, doc, onSnapshot,
       collection, addDoc, serverTimestamp, setDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -118,7 +116,7 @@
     document.getElementById("headerMeta").textContent =
       "classId=" + (classId||"(없음)") + " · set=" + (setId||"(없음)") + " · sid=" + (sid||"(없음)") + " · " + new Date().toLocaleString("ko-KR");
 
-    // 상태/DOM
+    // DOM
     const track = document.getElementById("track");
     const wordEl = document.getElementById("wordEl");
     const scoreEl = document.getElementById("score");
@@ -129,35 +127,35 @@
     const modal = document.getElementById("modal");
     const input = document.getElementById("answerInput");
 
+    // 규칙
     const pointsSeq = [10,8,6,4,2];
+    const GAP = 4;              // 글자 간 간격(px)
+    const FONT_SIZE = 42;       // .ch와 동일
+    const FONT_WEIGHT = 800;
 
-    // 설정값
+    // 설정/런타임 상태
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
 
-    // 런타임
-    let user = null;
-    let running = false;
-    let curIndex = -1;
-    let curWord = "";
-    let attemptIdx = 0;
-    let dir = "L2R";         // 'L2R' | 'R2L'
-    let speed = 0;           // px/s
-    let totalScore = 0;
+    let user = null, running = false;
+    let curIndex = -1, curWord = "", attemptIdx = 0;
+    let dir = "L2R"; let speed = 0; let totalScore = 0;
 
-    // 애니메이션
-    let rafId = 0;
-    let startTs = 0;
-    let headX = 0;           // "선두 글자"의 X 좌표
-    let trackW = 0;
+    // 애니메이션 상태
+    let rafId = 0, startTs = 0, headX = 0, trackW = 0;
+    let chSpans = [], offsets = [], groupWidth = 0;
 
-    // 글자 렌더링 자료
-    let chSpans = [];        // 각 글자 span DOM
-    let offsets = [];        // 각 글자의 누적 오프셋(px) (가변폭 반영)
-    let groupWidth = 0;      // 전체 글자 묶음 폭
+    // Canvas 측정 준비
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    function refreshFont(){
+      const fam = getComputedStyle(document.body).fontFamily || "system-ui";
+      ctx.font = FONT_WEIGHT + " " + FONT_SIZE + "px " + fam;
+    }
+    refreshFont();
 
-    // 인증 → config 구독
+    // 인증 후 config 구독
     onAuthStateChanged(auth, async (u)=>{
       if (!u){
         setPill("authPill","익명 인증 중…");
@@ -169,7 +167,7 @@
       subscribeConfig();
     });
 
-    function setPill(id, text){ document.getElementById(id).textContent = text; }
+    function setPill(id, t){ document.getElementById(id).textContent = t; }
     function docId(){ return classId + "_" + setId; }
 
     function subscribeConfig(){
@@ -178,18 +176,17 @@
         return;
       }
       onSnapshot(doc(db,"configs",docId()), (snap)=>{
-        if (!snap.exists()){
-          setPill("cfgPill","설정 없음");
-          msgEl.textContent = "교사가 configs/" + docId() + " 문서를 만들어야 합니다.";
-          stopAnim(); clearLetters(); return;
-        }
-        const cfg = snap.data() || {};
-        words = Array.isArray(cfg.words) ? cfg.words.filter(Boolean) : [];
-        rounds = Math.max(1, Number(cfg.rounds || 1));
-        const sp = cfg.speedBase || {};
-        fastMin = Math.max(1, Number(sp.fastMin || 420));
-        fastMax = Math.max(fastMin, Number(sp.fastMax || 520));
-        minFloor= Math.max(1, Number(sp.minFloor || 140));
+        if (!snap.exists()){ setPill("cfgPill","설정 없음"); stopAnim(); clearLetters(); running=false; msgEl.textContent="교사 설정 문서가 없습니다."; return; }
+        const cfg = snap.data()||{};
+        // 🔒 단어를 안전하게 정제(빈 줄/공백 제거)
+        words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
+        // 🔧 rounds는 단어 수를 넘지 않게 자동 보정 (넘으면 잘라냄)
+        const reqRounds = Math.max(1, Number(cfg.rounds||1));
+        rounds = Math.min(reqRounds, Math.max(1, words.length));
+        const sp=cfg.speedBase||{};
+        fastMin = Math.max(1, Number(sp.fastMin||420));
+        fastMax = Math.max(fastMin, Number(sp.fastMax||520));
+        minFloor= Math.max(1, Number(sp.minFloor||140));
         roundTotalEl.textContent = String(rounds);
 
         setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
@@ -200,170 +197,125 @@
     }
 
     function startSession(){
-      totalScore = 0; scoreEl.textContent = "0";
-      curIndex = -1; running = true;
-      // 단어 풀 구성
-      let pool = words.slice();
-      if (pool.length === 0) pool = ["start","ready","go"];
-      pool = shuffle(pool);
-      if (pool.length < rounds){
-        const need = rounds - pool.length;
-        for (let i=0;i<need;i++) pool.push(pool[i % pool.length]);
-      } else {
-        pool = pool.slice(0, rounds);
-      }
-      words = pool;
-      msgEl.textContent = "게임 시작!";
+      totalScore=0; scoreEl.textContent="0";
+      curIndex=-1; running=true;
+      // 단어 셔플 → rounds개만 사용 (기본 단어 섞지 않음)
+      words = shuffle(words).slice(0, rounds);
+      msgEl.textContent="게임 시작!";
       nextProblem(true);
     }
 
     function nextProblem(newRound){
       if (newRound){
         curIndex++;
-        if (curIndex >= rounds){ endSession(); return; }
+        if (curIndex>=rounds){ endSession(); return; }
         roundNowEl.textContent = String(curIndex+1);
-        curWord = String(words[curIndex] || "");
+        curWord = String(words[curIndex]||"");
         attemptIdx = 0;
-        speed = randRange(fastMin, fastMax); // 빠르게 시작
+        speed = rand(fastMin, fastMax);     // 빠르게 시작
       } else {
-        speed = Math.max(minFloor, speed * 0.9); // 10% 감속
+        speed = Math.max(minFloor, speed*0.9); // 10% 감속
       }
-
-      // 방향 랜덤
-      dir = Math.random() < 0.5 ? "L2R" : "R2L";
+      dir = Math.random()<0.5 ? "L2R" : "R2L";
       speedNowEl.textContent = Math.round(speed);
 
-      // 글자 빌드 & 측정
-      buildLetters(curWord);
+      buildLetters(curWord);                // ← 글자 단위 렌더링
       trackW = track.clientWidth;
-
-      if (dir === "L2R"){
-        headX = -groupWidth - 12; // 왼쪽 바깥에서 시작 (선두 = 첫 글자)
-      } else {
-        headX = trackW + groupWidth + 12; // 오른쪽 바깥에서 시작 (선두 = 첫 글자 = 오른쪽 끝)
-      }
+      headX = (dir==="L2R") ? -groupWidth-12 : trackW+groupWidth+12;
 
       startAnim();
     }
 
+    // === 글자 단위 렌더링 ===
     function buildLetters(word){
       clearLetters();
-      // 글자를 개별 span으로 생성
-      const temp = document.createElement("div");
-      document.body.appendChild(temp); // 측정용
+      refreshFont();
 
-      chSpans = [];
-      offsets = [];
       let x = 0;
-
       for (let i=0;i<word.length;i++){
         const ch = document.createElement("span");
         ch.className = "ch";
         ch.textContent = word[i];
         wordEl.appendChild(ch);
-        // 폭 측정 (가변폭 반영)
-        temp.style.position = "absolute";
-        temp.style.visibility = "hidden";
-        temp.style.font = getComputedStyle(ch).font;
-        temp.textContent = word[i];
-        const w = Math.ceil(temp.getBoundingClientRect().width || 24);
-        offsets.push(x);       // 선두로부터의 누적 오프셋
         chSpans.push(ch);
-        x += w + 4;            // 글자 간격 4px
+
+        // Canvas로 폭 측정(가변폭 글꼴 정확)
+        const w = Math.ceil(ctx.measureText(word[i]).width || 24);
+        offsets.push(x);
+        x += w + GAP;
       }
-      document.body.removeChild(temp);
-      groupWidth = Math.max(0, x - 4); // 마지막 간격 제거
-    }
+      groupWidth = Math.max(0, x - GAP); // 마지막 간격 제거
 
-    function clearLetters(){
-      wordEl.innerHTML = "";
-      chSpans = []; offsets = []; groupWidth = 0;
+      // 첫 프레임 위치 초기화(겹쳐 보이지 않게)
+      for (let i=0;i<chSpans.length;i++){
+        chSpans[i].style.left = (dir==="L2R" ? (-groupWidth-12+offsets[i]) : (track.clientWidth+groupWidth+12-offsets[i])) + "px";
+      }
     }
+    function clearLetters(){ wordEl.innerHTML=""; chSpans=[]; offsets=[]; groupWidth=0; }
 
-    function startAnim(){
-      stopAnim();
-      startTs = performance.now();
-      rafId = requestAnimationFrame(tick);
-    }
+    // 애니메이션
+    function startAnim(){ stopAnim(); startTs=performance.now(); rafId=requestAnimationFrame(tick); }
     function stopAnim(){ if (rafId){ cancelAnimationFrame(rafId); rafId=0; } }
+    function tick(t){
+      const dt=(t-startTs)/1000; startTs=t;
+      const d= speed*dt;
 
-    function tick(ts){
-      const dt = (ts - startTs)/1000;
-      startTs = ts;
-      const delta = speed * dt;
-
-      if (dir === "L2R"){
-        headX += delta;
-        // 각 글자 위치 업데이트 (선두 기준 + 누적오프셋)
-        for (let i=0;i<chSpans.length;i++){
-          const x = headX + offsets[i];
-          chSpans[i].style.left = x + "px";
-        }
+      if (dir==="L2R"){
+        headX += d;
+        for (let i=0;i<chSpans.length;i++) chSpans[i].style.left = (headX + offsets[i]) + "px";
       } else {
-        headX -= delta;
-        // 오른쪽→왼쪽: 선두가 오른쪽에서 들어오고, 뒤따르는 글자들이 왼쪽 쪽에 위치
-        for (let i=0;i<chSpans.length;i++){
-          const x = headX - offsets[i];
-          chSpans[i].style.left = x + "px";
-        }
+        headX -= d;
+        for (let i=0;i<chSpans.length;i++) chSpans[i].style.left = (headX - offsets[i]) + "px";
       }
-
-      rafId = requestAnimationFrame(tick);
+      rafId=requestAnimationFrame(tick);
     }
 
-    // 입력 모달
+    // 입력/판정
     document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
     document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
-    document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp(false));
+    document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp());
     window.addEventListener("keydown", (e)=>{
-      if (e.key === "Enter"){
-        if (modal.classList.contains("open")) submitAnswer();
-        else openModal();
-      } else if (e.key === "Escape"){
-        if (modal.classList.contains("open")) closeModal();
-        else handleWrongOrGiveUp(false);
-      }
+      if (e.key==="Enter"){ modal.classList.contains("open")?submitAnswer():openModal(); }
+      else if (e.key==="Escape"){ modal.classList.contains("open")?closeModal():handleWrongOrGiveUp(); }
     });
-
     function openModal(){ modal.classList.add("open"); modal.setAttribute("aria-hidden","false"); input.value=""; input.focus(); }
     function closeModal(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden","true"); }
 
     function normalize(s){ return String(s).toLowerCase().replace(/\s+/g,"").trim(); }
-    function randRange(a,b){ return a + Math.random()*(b-a); }
-    function shuffle(a){ const arr=a.slice(); for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]];} return arr; }
-    function waitMs(ms){ return new Promise(res=>setTimeout(res,ms)); }
+    function rand(a,b){ return a + Math.random()*(b-a); }
+    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]];} return x; }
+    const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
     async function submitAnswer(){
-      const val = (input.value||"").trim();
-      if (!val) return;
+      const val=(input.value||"").trim(); if (!val) return;
       closeModal();
-      const correct = normalize(val) === normalize(curWord);
-      if (correct){
-        const awarded = pointsSeq[Math.min(attemptIdx, pointsSeq.length-1)];
-        totalScore += awarded; scoreEl.textContent = String(totalScore);
-        await logResult({isCorrect:true, points:awarded});
+      const ok = normalize(val)===normalize(curWord);
+      if (ok){
+        const pts = pointsSeq[Math.min(attemptIdx, pointsSeq.length-1)];
+        totalScore += pts; scoreEl.textContent=String(totalScore);
+        await log({isCorrect:true, points:pts});
         nextProblem(true);
       } else {
-        await handleWrongOrGiveUp(true);
+        await handleWrongOrGiveUp();
       }
     }
-
     async function handleWrongOrGiveUp(){
-      await logResult({isCorrect:false, points:0});
+      await log({isCorrect:false, points:0});
       attemptIdx++;
       if (attemptIdx >= pointsSeq.length){
         msgEl.textContent = "정답: " + curWord;
-        await waitMs(1000);
+        await sleep(900);
         nextProblem(true);
       } else {
-        nextProblem(false); // 같은 문제, 10% 감속
+        nextProblem(false); // 같은 문제, 감속
       }
     }
 
-    async function logResult({isCorrect, points}){
-      try {
+    // 저장
+    async function log({isCorrect, points}){
+      try{
         await addDoc(collection(db,"results"), {
-          classId, set: setId, sid, name,
+          classId, set:setId, sid, name,
           word: curWord,
           attemptIndex: attemptIdx,
           isCorrect: !!isCorrect,
@@ -372,20 +324,20 @@
           direction: dir,
           createdAt: serverTimestamp()
         });
-      } catch(e){ console.error("save result error", e); }
+      }catch(e){ console.error("save result error", e); }
     }
 
     async function endSession(){
       running=false; stopAnim(); clearLetters();
       msgEl.textContent = "세트 종료! 총점: " + totalScore;
-      try {
+      try{
         await setDoc(doc(db,"sessions",[classId,setId,sid,Date.now()].join("_")), {
-          classId, set: setId, sid, name,
+          classId, set:setId, sid, name,
           totalPoints: totalScore,
           rounds,
           finishedAt: serverTimestamp()
         });
-      } catch(e){ console.error("session save error", e); }
+      }catch(e){ console.error("session save error", e); }
     }
   </script>
 </body>
