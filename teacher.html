@@ -1,244 +1,355 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>교사 대시보드</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- ★ 스타일은 아주 최소로만: 기존 느낌(파란 헤더 + 탭 버튼) 유지 -->
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      margin: 0;
-      background: #f4f6fb;
+    :root { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif; }
+    body { margin:0; background:#f5f7fb; color:#111827; }
+    header { background:#2563eb; color:#fff; padding:12px 18px; font-weight:700; }
+    nav { display:flex; gap:8px; padding:10px 14px; background:#e9edf6; border-bottom:1px solid #dde3ef; }
+    .tabbtn { border:1px solid #c9d2e6; background:#fff; border-radius:6px; padding:6px 10px; cursor:pointer; }
+    .tabbtn.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+    main { max-width:1100px; margin:16px auto; padding:0 12px; }
+    .panel { background:#fff; border:1px solid #e6eaf3; border-radius:8px; padding:12px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    label { display:inline-flex; align-items:center; gap:8px; }
+    input[type="text"], input[type="number"], textarea {
+      border:1px solid #cfd7e6; border-radius:6px; padding:8px 10px; background:#fff; min-width:220px;
     }
-    header {
-      background: #2563eb;
-      color: #fff;
-      padding: 12px 20px;
-      font-size: 18px;
-      font-weight: bold;
-    }
-    nav {
-      background: #e5eaf3;
-      padding: 8px 16px;
-      display: flex;
-      gap: 8px;
-    }
-    nav button {
-      border: none;
-      padding: 6px 14px;
-      border-radius: 4px;
-      background: #fff;
-      cursor: pointer;
-      font-weight: 500;
-    }
-    nav button.active {
-      background: #2563eb;
-      color: #fff;
-    }
-    section {
-      padding: 16px;
-    }
-    .panel {
-      background: #fff;
-      border-radius: 6px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.08);
-      padding: 12px;
-      margin-top: 8px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    th, td {
-      padding: 8px;
-      border-bottom: 1px solid #eceff5;
-      text-align: left;
-    }
-    th {
-      background: #f6f7fb;
-    }
+    textarea { width:100%; resize:vertical; }
+    .btn { border:1px solid #cfd7e6; background:#fff; border-radius:6px; padding:8px 12px; cursor:pointer; }
+    .btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+    .btn.green { background:#16a34a; color:#fff; border-color:#16a34a; }
+    .btn.red { background:#dc2626; color:#fff; border-color:#dc2626; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:8px; border-bottom:1px solid #edf1f7; }
+    thead th { background:#f7f9fc; }
+    .muted { color:#6b7280; font-size:12px; }
+    section { display:none; }
+    section.active { display:block; }
   </style>
 </head>
 <body>
   <header>교사 대시보드</header>
+
   <nav>
-    <button id="tab-settings" class="active">설정</button>
-    <button id="tab-live">실시간 결과</button>
-    <button id="tab-sum">합산 결과</button>
+    <button class="tabbtn active" data-tab="tab-settings">설정</button>
+    <button class="tabbtn" data-tab="tab-live">실시간 결과</button>
+    <button class="tabbtn" data-tab="tab-sum">합산 결과</button>
   </nav>
 
-  <!-- 설정 탭 -->
-  <section id="settings">
-    <div class="panel">
-      <label>classId <input id="classIdInput" type="text" placeholder="예: 6-1"></label><br><br>
-      <label>set <input id="setInput" type="text" placeholder="예: lesson1"></label><br><br>
-      <label>단어 목록<br>
-        <textarea id="wordsInput" rows="4" style="width:100%;"></textarea>
-      </label><br><br>
-      <label>라운드 수 <input id="roundsInput" type="number" value="5"></label><br><br>
-      <label>속도 하한 <input id="fastMinInput" type="number" value="420"></label><br><br>
-      <label>속도 상한 <input id="fastMaxInput" type="number" value="520"></label><br><br>
-      <label>최저 속도 바닥값 <input id="minFloorInput" type="number" value="140"></label><br><br>
-      <button id="saveBtn">저장</button>
-      <button id="startBtn" style="background:#16a34a;color:#fff;">세션 시작</button>
-      <button id="stopBtn" style="background:#dc2626;color:#fff;">세션 중지</button>
-    </div>
-  </section>
+  <main>
+    <!-- 설정 -->
+    <section id="tab-settings" class="active">
+      <div class="panel">
+        <div class="row">
+          <label>classId <input id="classIdInput" type="text" placeholder="예: 6-1" /></label>
+          <label>set <input id="setInput" type="text" placeholder="예: lesson1" /></label>
+        </div>
 
-  <!-- 실시간 결과 탭 -->
-  <section id="live" style="display:none;">
-    <div class="panel">
-      <h3>실시간 결과</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>이름</th><th>SID</th><th>반</th><th>세트</th>
-            <th>점수</th><th>정답/시도</th><th>소요</th><th>제출시각</th>
-          </tr>
-        </thead>
-        <tbody id="liveTbody">
-          <tr><td colspan="8">아직 결과 없음</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+        <div style="height:8px"></div>
+        <label>단어 목록 (줄바꿈/띄어쓰기 구분)</label>
+        <textarea id="wordsInput" rows="6" placeholder="예)\napple banana cherry"></textarea>
 
-  <!-- 합산 결과 탭 -->
-  <section id="sum" style="display:none;">
-    <div class="panel">
-      <h3>합산 결과(세트 종료 총점) <small id="sumMeta" style="opacity:.7;"></small></h3>
-      <table>
-        <thead>
-          <tr>
-            <th>이름</th><th>SID</th><th>반</th><th>세트</th>
-            <th style="text-align:right;">총점</th><th>종료시각</th>
-          </tr>
-        </thead>
-        <tbody id="sumTbody">
-          <tr><td colspan="6">아직 종료된 세션 없음</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+        <div style="height:8px"></div>
+        <div class="row">
+          <label>라운드 수 <input id="roundsInput" type="number" value="5" min="1" /></label>
+          <label>속도 하한 <input id="fastMinInput" type="number" value="420" min="1" /></label>
+          <label>속도 상한 <input id="fastMaxInput" type="number" value="520" min="1" /></label>
+          <label>최저 속도 바닥값 <input id="minFloorInput" type="number" value="140" min="1" /></label>
+        </div>
+
+        <div style="height:10px"></div>
+        <div class="row">
+          <button id="loadBtn" class="btn">불러오기</button>
+          <button id="saveBtn" class="btn primary">저장</button>
+          <button id="startBtn" class="btn green">세션 시작</button>
+          <button id="stopBtn" class="btn red">세션 중지</button>
+          <span id="cfgMeta" class="muted"></span>
+        </div>
+        <div style="height:6px"></div>
+        <div class="muted">문서는 <code>configs/{classId}_{set}</code> 에 저장됩니다.</div>
+      </div>
+    </section>
+
+    <!-- 실시간 결과 -->
+    <section id="tab-live">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;">
+          <h3 style="margin:0;">실시간 결과</h3>
+          <div id="liveMeta" class="muted"></div>
+        </div>
+        <div style="height:6px"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>SID</th>
+              <th>반</th>
+              <th>세트</th>
+              <th>단어</th>
+              <th>시도#</th>
+              <th>정답</th>
+              <th style="text-align:right;">점수</th>
+              <th>제출시각</th>
+            </tr>
+          </thead>
+          <tbody id="liveTbody">
+            <tr><td colspan="9" class="muted">아직 결과 없음</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 합산 결과 -->
+    <section id="tab-sum">
+      <div class="panel">
+        <div class="row" style="justify-content:space-between;">
+          <h3 style="margin:0;">합산 결과(세트 종료 총점)</h3>
+          <div id="sumMeta" class="muted"></div>
+        </div>
+        <div style="height:6px"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>SID</th>
+              <th>반</th>
+              <th>세트</th>
+              <th style="text-align:right;">총점</th>
+              <th>종료시각</th>
+            </tr>
+          </thead>
+          <tbody id="sumTbody">
+            <tr><td colspan="6" class="muted">아직 종료된 세션 없음</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
   <script type="module">
+    /* ------------------ Firebase ------------------ */
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
-      getFirestore, collection, query, where,
-      onSnapshot, setDoc, doc, updateDoc
+      getFirestore, doc, getDoc, setDoc, updateDoc,
+      collection, query, where, onSnapshot
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+    // ★ 프로젝트 값 (학생 페이지와 동일)
     const firebaseConfig = {
-      apiKey: "AIzaSyCUhSD0-xxxxxxx",
-      authDomain: "xxxx.firebaseapp.com",
-      projectId: "xxxx",
-      storageBucket: "xxxx.appspot.com",
-      messagingSenderId: "xxxx",
-      appId: "xxxx"
+      apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
+      authDomain: "grade-6-english-c17f3.firebaseapp.com",
+      projectId: "grade-6-english-c17f3",
+      storageBucket: "grade-6-english-c17f3.appspot.com",
+      messagingSenderId: "676305839050",
+      appId: "1:676305839050:web:a5399633e7b828883fe533"
     };
+
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    const db  = getFirestore(app);
+    const auth = getAuth(app);
 
-    // --- 탭 전환 ---
-    const tabs = {
-      settings: document.getElementById("settings"),
-      live: document.getElementById("live"),
-      sum: document.getElementById("sum"),
+    /* ------------------ Tabs ------------------ */
+    const tabButtons = Array.from(document.querySelectorAll(".tabbtn"));
+    const sections = {
+      "tab-settings": document.getElementById("tab-settings"),
+      "tab-live": document.getElementById("tab-live"),
+      "tab-sum": document.getElementById("tab-sum"),
     };
-    function showTab(name) {
-      Object.keys(tabs).forEach(k => tabs[k].style.display = (k===name?"block":"none"));
-      document.querySelectorAll("nav button").forEach(btn=>btn.classList.remove("active"));
-      document.getElementById("tab-"+name).classList.add("active");
-    }
-    document.getElementById("tab-settings").onclick = ()=>showTab("settings");
-    document.getElementById("tab-live").onclick = ()=>showTab("live");
-    document.getElementById("tab-sum").onclick = ()=>showTab("sum");
-
-    // --- Firestore 구독 ---
-    let currentClassId="", currentSetId="";
-
-    function subscribeResults(classId, setId){
-      const q = query(collection(db,"results"),
-        where("classId","==",classId), where("set","==",setId));
-      onSnapshot(q,(snap)=>{
-        const rows=[];
-        snap.forEach(doc=>rows.push(doc.data()));
-        rows.sort((a,b)=>b.submittedAt?.seconds - a.submittedAt?.seconds);
-        renderResults(rows);
-      });
-    }
-    function renderResults(rows){
-      const tb=document.getElementById("liveTbody");
-      if(!rows.length){ tb.innerHTML="<tr><td colspan=8>결과 없음</td></tr>"; return; }
-      tb.innerHTML=rows.map(r=>{
-        const dt=r.submittedAt? new Date(r.submittedAt.seconds*1000).toLocaleString("ko-KR"):"-";
-        return `<tr>
-          <td>${r.name||"-"}</td><td>${r.sid||"-"}</td><td>${r.classId||"-"}</td>
-          <td>${r.set||"-"}</td><td>${r.points||0}</td>
-          <td>${r.correct||0}/${r.tries||0}</td>
-          <td>${r.elapsed||"-"}</td><td>${dt}</td></tr>`;
-      }).join("");
-    }
-
-    function subscribeSessionsForSum(classId,setId){
-      const q=query(collection(db,"sessions"),
-        where("classId","==",classId), where("set","==",setId));
-      document.getElementById("sumMeta").textContent=`(${classId} · ${setId})`;
-      onSnapshot(q,(snap)=>{
-        const rows=[];
-        snap.forEach(doc=>rows.push(doc.data()));
-        rows.sort((a,b)=>{
-          const pb=Number(b.totalPoints||0), pa=Number(a.totalPoints||0);
-          if(pb!==pa) return pb-pa;
-          return (b.finishedAt?.seconds||0)-(a.finishedAt?.seconds||0);
+    tabButtons.forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        tabButtons.forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        const target = btn.dataset.tab;
+        Object.keys(sections).forEach(id=>{
+          sections[id].classList.toggle("active", id===target);
         });
-        renderSessions(rows);
       });
+    });
+
+    /* ------------------ Inputs ------------------ */
+    const $ = (id)=>document.getElementById(id);
+    const classIdInput = $("classIdInput");
+    const setInput = $("setInput");
+    const wordsInput = $("wordsInput");
+    const roundsInput = $("roundsInput");
+    const fastMinInput = $("fastMinInput");
+    const fastMaxInput = $("fastMaxInput");
+    const minFloorInput= $("minFloorInput");
+    const cfgMeta = $("cfgMeta");
+    const liveMeta = $("liveMeta");
+    const sumMeta = $("sumMeta");
+
+    // URL 파라미터로 기본값 채우기
+    const p = new URLSearchParams(location.search);
+    classIdInput.value = p.get("classId") || classIdInput.value;
+    setInput.value     = p.get("set")     || setInput.value;
+
+    /* ------------------ Auth then wire up ------------------ */
+    onAuthStateChanged(auth, async (u)=>{
+      if (!u) {
+        try { await signInAnonymously(auth); } catch(e){ console.error(e); alert("익명 인증 실패: " + e.message); }
+        return;
+      }
+      // 자동으로 현재 classId/set 값 기준으로 구독 시작(있으면)
+      if (classIdInput.value && setInput.value) {
+        beginSubscriptions();
+      }
+    });
+
+    // 버튼들
+    $("loadBtn").addEventListener("click", loadConfig);
+    $("saveBtn").addEventListener("click", saveConfig);
+    $("startBtn").addEventListener("click", ()=>setActive(true));
+    $("stopBtn").addEventListener("click", ()=>setActive(false));
+
+    async function loadConfig(){
+      const classId = (classIdInput.value || "").trim();
+      const setId   = (setInput.value || "").trim();
+      if (!classId || !setId) return alert("classId와 set을 입력하세요.");
+      const ref = doc(db, "configs", `${classId}_${setId}`);
+      const snap = await getDoc(ref);
+      if (!snap.exists()){ cfgMeta.textContent = "설정 문서 없음"; return; }
+      const c = snap.data() || {};
+      wordsInput.value  = (Array.isArray(c.words)?c.words:[]).join("\n");
+      roundsInput.value = Number(c.rounds||5);
+      fastMinInput.value= Number((c.speedBase||{}).fastMin||420);
+      fastMaxInput.value= Number((c.speedBase||{}).fastMax||520);
+      minFloorInput.value=Number((c.speedBase||{}).minFloor||140);
+      cfgMeta.textContent = `불러오기 완료 (${new Date().toLocaleString("ko-KR")})`;
+      // 구독 갱신
+      beginSubscriptions();
     }
-    function renderSessions(rows){
-      const tb=document.getElementById("sumTbody");
-      if(!rows.length){ tb.innerHTML="<tr><td colspan=6>종료된 세션 없음</td></tr>"; return; }
-      tb.innerHTML=rows.map(r=>{
-        const dt=r.finishedAt?new Date(r.finishedAt.seconds*1000).toLocaleString("ko-KR"):"-";
-        return `<tr>
-          <td>${r.name||"-"}</td><td>${r.sid||"-"}</td>
-          <td>${r.classId||"-"}</td><td>${r.set||"-"}</td>
-          <td style="text-align:right;font-weight:700;">${Number(r.totalPoints||0)}</td>
-          <td>${dt}</td></tr>`;
+
+    async function saveConfig(){
+      const classId = (classIdInput.value || "").trim();
+      const setId   = (setInput.value || "").trim();
+      if (!classId || !setId) return alert("classId와 set을 입력하세요.");
+
+      const words = wordsInput.value.split(/\s+/).map(s=>s.trim()).filter(Boolean);
+      const payload = {
+        classId, set:setId, words,
+        rounds: Math.max(1, Number(roundsInput.value||1)),
+        speedBase: {
+          fastMin: Math.max(1, Number(fastMinInput.value||420)),
+          fastMax: Math.max(1, Number(fastMaxInput.value||520)),
+          minFloor:Math.max(1, Number(minFloorInput.value||140))
+        },
+        active: false
+      };
+      await setDoc(doc(db, "configs", `${classId}_${setId}`), payload);
+      cfgMeta.textContent = `저장 완료 (${classId}_${setId})`;
+      beginSubscriptions();
+    }
+
+    async function setActive(flag){
+      const classId = (classIdInput.value || "").trim();
+      const setId   = (setInput.value || "").trim();
+      if (!classId || !setId) return alert("먼저 저장/불러오기를 하세요.");
+      await updateDoc(doc(db,"configs",`${classId}_${setId}`), { active: !!flag });
+      cfgMeta.textContent = flag ? "세션 시작" : "세션 중지";
+    }
+
+    /* ------------------ Subscriptions ------------------ */
+    let unsubResults = null;
+    let unsubSessions = null;
+
+    function beginSubscriptions(){
+      const classId = (classIdInput.value || "").trim();
+      const setId   = (setInput.value || "").trim();
+      if (!classId || !setId) return;
+
+      // 메타
+      liveMeta.textContent = `(${classId} · ${setId})`;
+      sumMeta.textContent  = `(${classId} · ${setId})`;
+
+      // 결과 구독 재시작
+      if (unsubResults) { unsubResults(); unsubResults = null; }
+      if (unsubSessions){ unsubSessions(); unsubSessions = null; }
+
+      // results (라운드별 실시간)
+      {
+        const q = query(
+          collection(db,"results"),
+          where("classId","==",classId),
+          where("set","==",setId)
+        );
+        unsubResults = onSnapshot(q, (snap)=>{
+          const rows = [];
+          snap.forEach(d=>rows.push({ id:d.id, ...d.data() }));
+          // createdAt 내림차순(없으면 0)
+          rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+          renderResults(rows);
+        }, (err)=>{ console.error(err); renderResults([]); });
+      }
+
+      // sessions (세트 종료 총점)
+      {
+        const q = query(
+          collection(db,"sessions"),
+          where("classId","==",classId),
+          where("set","==",setId)
+        );
+        unsubSessions = onSnapshot(q, (snap)=>{
+          const rows = [];
+          snap.forEach(d=>rows.push({ id:d.id, ...d.data() }));
+          rows.sort((a,b)=>{
+            const pb = Number(b.totalPoints||0), pa = Number(a.totalPoints||0);
+            if (pb !== pa) return pb - pa;
+            return (b.finishedAt?.seconds||0) - (a.finishedAt?.seconds||0);
+          });
+          renderSessions(rows);
+        }, (err)=>{ console.error(err); renderSessions([]); });
+      }
+    }
+
+    /* ------------------ Renderers ------------------ */
+    function renderResults(rows){
+      const tb = $("liveTbody");
+      if (!rows.length) { tb.innerHTML = `<tr><td colspan="9" class="muted">결과 없음</td></tr>`; return; }
+
+      tb.innerHTML = rows.map(r=>{
+        const ts = r.createdAt?.seconds ? new Date(r.createdAt.seconds*1000).toLocaleString("ko-KR") : "-";
+        return `
+          <tr>
+            <td>${esc(r.name)}</td>
+            <td>${esc(r.sid)}</td>
+            <td>${esc(r.classId)}</td>
+            <td>${esc(r.set)}</td>
+            <td>${esc(r.word)}</td>
+            <td>${Number(r.attemptIndex ?? 0)}</td>
+            <td>${r.isCorrect ? "O" : "X"}</td>
+            <td style="text-align:right;">${Number(r.points||0)}</td>
+            <td>${ts}</td>
+          </tr>`;
       }).join("");
     }
 
-    // --- 설정 저장/세션 제어 ---
-    document.getElementById("saveBtn").onclick=async()=>{
-      const classId=document.getElementById("classIdInput").value;
-      const setId=document.getElementById("setInput").value;
-      currentClassId=classId; currentSetId=setId;
-      const words=document.getElementById("wordsInput").value.split(/\s+/).filter(Boolean);
-      const config={
-        classId,set:setId,words,
-        rounds:+document.getElementById("roundsInput").value||5,
-        speedBase:{
-          fastMin:+document.getElementById("fastMinInput").value||420,
-          fastMax:+document.getElementById("fastMaxInput").value||520,
-          minFloor:+document.getElementById("minFloorInput").value||140
-        },
-        active:false
-      };
-      await setDoc(doc(db,"configs",`${classId}_${setId}`),config);
-      alert("저장 완료");
-      subscribeResults(classId,setId);
-      subscribeSessionsForSum(classId,setId);
-    };
+    function renderSessions(rows){
+      const tb = $("sumTbody");
+      if (!rows.length) { tb.innerHTML = `<tr><td colspan="6" class="muted">아직 종료된 세션 없음</td></tr>`; return; }
 
-    document.getElementById("startBtn").onclick=async()=>{
-      if(!currentClassId||!currentSetId) return alert("먼저 저장하세요");
-      await updateDoc(doc(db,"configs",`${currentClassId}_${currentSetId}`),{active:true});
-    };
-    document.getElementById("stopBtn").onclick=async()=>{
-      if(!currentClassId||!currentSetId) return;
-      await updateDoc(doc(db,"configs",`${currentClassId}_${currentSetId}`),{active:false});
-    };
+      tb.innerHTML = rows.map(r=>{
+        const ts = r.finishedAt?.seconds ? new Date(r.finishedAt.seconds*1000).toLocaleString("ko-KR") : "-";
+        return `
+          <tr>
+            <td>${esc(r.name)}</td>
+            <td>${esc(r.sid)}</td>
+            <td>${esc(r.classId)}</td>
+            <td>${esc(r.set)}</td>
+            <td style="text-align:right;font-weight:700;">${Number(r.totalPoints||0)}</td>
+            <td>${ts}</td>
+          </tr>`;
+      }).join("");
+    }
 
+    /* ------------------ Utils ------------------ */
+    function esc(v){ return (v==null?"":String(v)).replace(/[&<>"']/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[s])); }
   </script>
 </body>
 </html>
