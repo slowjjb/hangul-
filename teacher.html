@@ -3,47 +3,148 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>교사 대시보드 – 실시간 결과 (minimal)</title>
+  <title>교사 대시보드 – 설정 & 실시간 결과</title>
   <style>
-    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,'Noto Sans KR',sans-serif; background:#f7f7fb; color:#222; }
-    header { background:#2b67f6; color:#fff; padding:16px 20px; }
-    main { max-width:1100px; margin:20px auto; padding:0 16px; }
-    .card { background:#fff; border:1px solid #e6e6ef; border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.04);}
-    table { width:100%; border-collapse:collapse; margin-top:12px; }
-    th,td { border-bottom:1px solid #eee; padding:10px 8px; text-align:left; }
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans KR', 'Malgun Gothic', sans-serif; }
+    body { margin:0; background:#f6f7fb; color:#222; }
+    header { background:#2b67f6; color:#fff; padding:14px 18px; }
+    header h1 { margin:0; font-size:20px; }
+    header .meta { opacity:.9; font-size:13px; margin-top:4px; }
+    main { max-width: 1100px; margin: 18px auto 40px; padding: 0 14px; }
+
+    .tabs { display:flex; gap:8px; margin-bottom:10px; }
+    .tabbtn { border:1px solid #dfe3ee; background:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
+    .tabbtn.active { background:#2b67f6; color:#fff; border-color:#2b67f6; }
+    .panel { display:none; }
+    .panel.active { display:block; }
+
+    .card { background:#fff; border:1px solid #e8eaf3; border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+
+    .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .pill { background:#eef3ff; color:#2b67f6; padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px; }
+    .badge{ background:#f1f1f8; padding:2px 8px; border-radius:8px; font-size:12px; margin-left:8px; }
+    .muted{ color:#666; font-size:12px; }
+
+    label { font-weight:700; font-size:13px; }
+    input[type="text"], input[type="number"], textarea {
+      width:100%; padding:10px 12px; border:1px solid #dfe3ee; border-radius:10px; background:#fff;
+      font-size:14px;
+    }
+    textarea { min-height:140px; resize:vertical; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    .grid-3 { display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .btn { border:1px solid #cfd5e6; background:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
+    .btn.primary { background:#2b67f6; color:#fff; border-color:#2b67f6; }
+    .btn.warn { background:#ffe8e6; color:#b00020; border-color:#ffbdb6; }
+    .btn.success { background:#e9f8ef; color:#0a7f3f; border-color:#bfe8cb; }
+
+    table { width:100%; border-collapse: collapse; margin-top:12px; }
+    th, td { border-bottom:1px solid #eee; padding:10px 8px; text-align:left; font-size:14px; }
     th { font-size:13px; color:#555; background:#fafbff; position:sticky; top:0; }
-    .pill { background:#eef3ff; color:#2b67f6; padding:6px 10px; border-radius:999px; font-weight:600; }
-    .badge{ background:#f1f1f8; padding:2px 8px; border-radius:8px; font-size:12px; margin-left:8px;}
-    .small{ font-size:12px; color:#666; }
+    tbody tr:hover { background:#fafcff; }
+    .small { font-size:12px; color:#666; }
+    .right { text-align:right; }
   </style>
 </head>
 <body>
   <header>
-    <h1 style="margin:0;">교사 대시보드</h1>
-    <div id="meta" style="opacity:.9;font-size:14px;margin-top:4px"></div>
+    <h1>교사 대시보드</h1>
+    <div class="meta" id="headerMeta">파라미터 인식 중…</div>
   </header>
 
   <main>
-    <div class="card">
-      <div><span class="pill" id="auth">인증 대기</span><span class="badge" id="live">실시간 구독 준비중</span></div>
-      <table>
-        <thead>
-          <tr>
-            <th>이름</th><th>SID</th><th>반</th><th>세트</th>
-            <th>점수</th><th>정답/시도</th><th>소요</th><th>제출시각</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"><tr><td colspan="8" class="small">데이터를 불러오는 중…</td></tr></tbody>
-      </table>
+    <div class="tabs">
+      <button id="tabSettings" class="tabbtn active">설정</button>
+      <button id="tabResults" class="tabbtn">실시간 결과</button>
+      <span class="pill" id="authPill">인증 대기</span>
+      <span class="badge" id="liveBadge">구독 준비중</span>
     </div>
+
+    <!-- 설정 패널 -->
+    <section id="panelSettings" class="panel active">
+      <div class="card">
+        <div class="grid">
+          <div>
+            <label>classId</label>
+            <input id="inpClassId" type="text" placeholder="예: 6-1">
+          </div>
+          <div>
+            <label>set</label>
+            <input id="inpSet" type="text" placeholder="예: lesson1">
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label>단어 목록 (줄당 1개)</label>
+          <textarea id="inpWords" placeholder="예)\napple\nbanana\ncherry"></textarea>
+          <div class="muted">빈 줄/공백은 자동으로 제거됩니다.</div>
+        </div>
+
+        <div class="grid-3" style="margin-top:12px;">
+          <div>
+            <label>라운드 수 (rounds)</label>
+            <input id="inpRounds" type="number" min="1" step="1" value="10">
+          </div>
+          <div>
+            <label>초기 속도 하한 (fastMin, px/s)</label>
+            <input id="inpFastMin" type="number" min="1" step="1" value="420">
+          </div>
+          <div>
+            <label>초기 속도 상한 (fastMax, px/s)</label>
+            <input id="inpFastMax" type="number" min="1" step="1" value="520">
+          </div>
+        </div>
+        <div class="grid" style="margin-top:12px;">
+          <div>
+            <label>최저 속도 바닥값 (minFloor, px/s)</label>
+            <input id="inpMinFloor" type="number" min="1" step="1" value="140">
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <div class="actions">
+              <button class="btn" id="btnLoad">불러오기</button>
+              <button class="btn primary" id="btnSave">저장</button>
+              <button class="btn success" id="btnStart">세션 시작</button>
+              <button class="btn warn" id="btnStop">세션 중지</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="hint" class="muted" style="margin-top:8px;">
+          문서ID는 <code>configs/{classId}_{set}</code> 형식으로 저장/읽기합니다.
+        </div>
+      </div>
+    </section>
+
+    <!-- 실시간 결과 패널 -->
+    <section id="panelResults" class="panel">
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>이름</th><th>SID</th><th>반</th><th>세트</th>
+              <th>점수</th><th>정답/시도</th><th>소요</th><th>제출시각</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="8" class="small">데이터를 불러오는 중…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script type="module">
+    // Firebase SDK
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getFirestore, collection, query, where, onSnapshot,
+      doc, getDoc, setDoc, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // ✅ 사용자님 프로젝트 설정 (반드시 이 값이어야 합니다)
+    // ✅ 사용자님 Firebase 프로젝트 설정
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -53,64 +154,215 @@
       appId: "1:676305839050:web:a5399633e7b828883fe533"
     };
 
-    // 🔎 디버그: 실제 적용된 키 앞 12자 노출
-    console.log('[teacher] apiKey =', (firebaseConfig.apiKey||'').slice(0,12)+'…');
-
+    // 초기화
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
     const auth = getAuth(app);
 
-    const p = new URLSearchParams(location.search);
-    const classId = p.get('classId')||'';
-    const setId   = p.get('set')||'';
-    document.getElementById('meta').textContent = `classId=${classId||'(없음)'} · set=${setId||'(없음)'}`;
+    // DOM 헬퍼
+    const $ = (s) => document.querySelector(s);
+    const params = new URLSearchParams(location.search);
+    const initialClass = params.get('classId') || '';
+    const initialSet   = params.get('set') || '';
 
-    let unsub=null, all=[];
-    const toDate=(v)=> v?.seconds?new Date(v.seconds*1000): (isNaN(new Date(v))?null:new Date(v));
-    const toKST=(d)=> d?new Intl.DateTimeFormat('ko-KR',{dateStyle:'short',timeStyle:'medium',timeZone:'Asia/Seoul'}).format(d):'';
+    // 헤더 메타 표시 & 입력 기본값 세팅
+    $('#headerMeta').textContent = `classId=${initialClass || '(없음)'} · set=${initialSet || '(없음)'} · ${new Date().toLocaleString('ko-KR')}`;
+    $('#inpClassId').value = initialClass;
+    $('#inpSet').value = initialSet;
 
-    function render(){
-      const rows = all.filter(r=>!setId||r.set===setId).sort((a,b)=>(toDate(b.createdAt)?.getTime()||-1)-(toDate(a.createdAt)?.getTime()||-1));
-      const tb = document.getElementById('tbody');
-      if(!rows.length){ tb.innerHTML=`<tr><td colspan="8" class="small">표시할 데이터가 없습니다.</td></tr>`; return; }
-      tb.innerHTML = rows.map(r=>{
-        const d=toDate(r.createdAt);
-        const ratio=(typeof r.correct==='number'&&typeof r.attempts==='number')?`${r.correct}/${r.attempts}`:'-';
+    // 탭 전환
+    const tabSettings = $('#tabSettings');
+    const tabResults  = $('#tabResults');
+    const panelSettings = $('#panelSettings');
+    const panelResults  = $('#panelResults');
+    tabSettings.addEventListener('click', ()=>{
+      tabSettings.classList.add('active'); tabResults.classList.remove('active');
+      panelSettings.classList.add('active'); panelResults.classList.remove('active');
+    });
+    tabResults.addEventListener('click', ()=>{
+      tabResults.classList.add('active'); tabSettings.classList.remove('active');
+      panelResults.classList.add('active'); panelSettings.classList.remove('active');
+    });
+
+    // 인증 가드
+    let unsub = null; // 결과 구독 해제용
+    onAuthStateChanged(auth, async (user)=>{
+      if (!user) {
+        $('#authPill').textContent = '익명 인증 중…';
+        try { await signInAnonymously(auth); } catch(e){
+          console.error(e); $('#authPill').textContent = '인증 실패';
+        }
+        return;
+      }
+      $('#authPill').textContent = '인증 완료';
+      // 인증 후 실시간 결과 구독 시작
+      startLiveResults();
+    });
+
+    // ===== 설정 패널 로직 =====
+    function docIdFor(classId, setId){ return `${classId}_${setId}`; }
+
+    // 불러오기
+    $('#btnLoad').addEventListener('click', async ()=>{
+      const classId = $('#inpClassId').value.trim();
+      const setId   = $('#inpSet').value.trim();
+      if (!classId || !setId) { alert('classId와 set을 입력하세요.'); return; }
+      try {
+        const ref = doc(db, 'configs', docIdFor(classId, setId));
+        const snap = await getDoc(ref);
+        if (!snap.exists()){
+          alert('설정 문서가 없습니다. 먼저 저장을 눌러 생성할 수 있어요.');
+          return;
+        }
+        const cfg = snap.data() || {};
+        $('#inpRounds').value   = Number(cfg.rounds ?? 10);
+        $('#inpFastMin').value  = Number(cfg?.speedBase?.fastMin ?? 420);
+        $('#inpFastMax').value  = Number(cfg?.speedBase?.fastMax ?? 520);
+        $('#inpMinFloor').value = Number(cfg?.speedBase?.minFloor ?? 140);
+        // words -> textarea (줄바꿈)
+        const words = Array.isArray(cfg.words) ? cfg.words : [];
+        $('#inpWords').value = words.join('\n');
+        $('#hint').textContent = `불러옴: configs/${docIdFor(classId, setId)} (active=${cfg.active === true})`;
+      } catch (e) {
+        console.error(e);
+        alert('불러오기 중 오류: ' + e.message);
+      }
+    });
+
+    // 저장
+    $('#btnSave').addEventListener('click', async ()=>{
+      const classId = $('#inpClassId').value.trim();
+      const setId   = $('#inpSet').value.trim();
+      if (!classId || !setId) { alert('classId와 set을 입력하세요.'); return; }
+
+      // textarea -> 배열(공백/빈줄 제거)
+      const words = $('#inpWords').value
+        .split('\n')
+        .map(s=>s.trim())
+        .filter(Boolean);
+
+      const rounds   = Math.max(1, Number($('#inpRounds').value || 10));
+      const fastMin  = Math.max(1, Number($('#inpFastMin').value || 420));
+      const fastMax  = Math.max(fastMin, Number($('#inpFastMax').value || 520));
+      const minFloor = Math.max(1, Number($('#inpMinFloor').value || 140));
+
+      try {
+        const ref = doc(db, 'configs', docIdFor(classId, setId));
+        await setDoc(ref, {
+          classId, set: setId,
+          words,
+          rounds,
+          active: false, // 저장 시엔 기본 false 유지(시작/중지는 별도 버튼)
+          speedBase: { fastMin, fastMax, minFloor },
+          updatedAt: serverTimestamp(),
+          updatedBy: 'teacher'
+        }, { merge: true });
+
+        $('#hint').textContent = `저장 완료: configs/${docIdFor(classId, setId)} (active=false)`;
+        alert('저장 완료');
+      } catch (e) {
+        console.error(e);
+        alert('저장 중 오류: ' + e.message);
+      }
+    });
+
+    // 세션 시작 (active=true)
+    $('#btnStart').addEventListener('click', async ()=>{
+      const classId = $('#inpClassId').value.trim();
+      const setId   = $('#inpSet').value.trim();
+      if (!classId || !setId) { alert('classId와 set을 입력하세요.'); return; }
+      try {
+        const ref = doc(db, 'configs', docIdFor(classId, setId));
+        await setDoc(ref, { active: true, updatedAt: serverTimestamp() }, { merge: true });
+        $('#hint').textContent = `세션 시작됨: configs/${docIdFor(classId, setId)} (active=true)`;
+        alert('세션 시작');
+      } catch (e) {
+        console.error(e); alert('세션 시작 오류: ' + e.message);
+      }
+    });
+
+    // 세션 중지 (active=false)
+    $('#btnStop').addEventListener('click', async ()=>{
+      const classId = $('#inpClassId').value.trim();
+      const setId   = $('#inpSet').value.trim();
+      if (!classId || !setId) { alert('classId와 set을 입력하세요.'); return; }
+      try {
+        const ref = doc(db, 'configs', docIdFor(classId, setId));
+        await setDoc(ref, { active: false, updatedAt: serverTimestamp() }, { merge: true });
+        $('#hint').textContent = `세션 중지됨: configs/${docIdFor(classId, setId)} (active=false)`;
+        alert('세션 중지');
+      } catch (e) {
+        console.error(e); alert('세션 중지 오류: ' + e.message);
+      }
+    });
+
+    // ===== 실시간 결과 표 =====
+    let allRows = [];
+    function toDateSafe(v){
+      if (!v) return null;
+      if (typeof v==='object' && typeof v.seconds==='number') {
+        return new Date(v.seconds*1000 + Math.floor((v.nanoseconds||0)/1e6));
+      }
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const toKST = (d)=> d ? new Intl.DateTimeFormat('ko-KR',{dateStyle:'short', timeStyle:'medium', timeZone:'Asia/Seoul'}).format(d) : '';
+
+    function renderTable(){
+      const setId = $('#inpSet').value.trim();
+      const rows = allRows
+        .filter(r => !setId || r.set === setId)
+        .sort((a,b)=>(toDateSafe(b.createdAt)?.getTime()||-1) - (toDateSafe(a.createdAt)?.getTime()||-1));
+
+      const tbody = $('#tbody');
+      if (!rows.length){
+        tbody.innerHTML = `<tr><td colspan="8" class="small">표시할 데이터가 없습니다.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(r=>{
+        const d = toDateSafe(r.createdAt);
+        const ratio = (typeof r.correct==='number' && typeof r.attempts==='number') ? `${r.correct}/${r.attempts}` : '-';
+        const timeSpent = typeof r.timeSpentSec==='number' ? `${r.timeSpentSec}s` : (r.timeSpent||'');
         return `<tr>
-          <td>${r.name||''}</td><td>${r.sid||''}</td><td>${r.classId||''}</td><td>${r.set||''}</td>
-          <td>${r.score??r.points??''}</td><td>${ratio}</td><td>${r.timeSpent??(r.timeSpentSec?`${r.timeSpentSec}s`:'')}</td>
-          <td>${toKST(d)}</td></tr>`;
+          <td>${escapeHTML(r.name || '')}</td>
+          <td>${escapeHTML(r.sid || '')}</td>
+          <td>${escapeHTML(r.classId || '')}</td>
+          <td>${escapeHTML(r.set || '')}</td>
+          <td class="right">${r.score ?? r.points ?? ''}</td>
+          <td>${ratio}</td>
+          <td>${escapeHTML(timeSpent)}</td>
+          <td>${toKST(d)}</td>
+        </tr>`;
       }).join('');
     }
+    function escapeHTML(s){ return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;'); }
 
-    async function startLive(){
-      if(!classId){ console.warn('classId 필요'); return; }
-      if(unsub) unsub();
-      const qRef = query(collection(db,'results'), where('classId','==',classId)); // 인덱스 없이 동작
-      document.getElementById('live').textContent='실시간 구독 연결중…';
+    function startLiveResults(){
+      const classId = $('#inpClassId').value.trim() || initialClass;
+      if (!classId) { $('#liveBadge').textContent='classId 필요'; return; }
+      if (unsub) unsub();
+      const qRef = query(collection(db,'results'), where('classId','==', classId)); // 인덱스 없이 동작
+      $('#liveBadge').textContent = '실시간 구독 연결중…';
       unsub = onSnapshot(qRef, snap=>{
         const next=[];
         snap.forEach(doc=>{
-          const d=doc.data()||{};
-          next.push({ id:doc.id, ...d, createdAt:d.createdAt ?? d.submittedAt ?? d.timestamp ?? null });
+          const d = doc.data() || {};
+          next.push({
+            id: doc.id,
+            classId: d.classId, set: d.set, sid: d.sid, name: d.name,
+            score: d.score, points: d.points, correct: d.correct, attempts: d.attempts,
+            timeSpent: d.timeSpent, timeSpentSec: d.timeSpentSec,
+            createdAt: d.createdAt ?? d.submittedAt ?? d.timestamp ?? null
+          });
         });
-        all=next; render();
-        document.getElementById('live').textContent='실시간 연결됨';
-      },err=>{
-        console.error(err); document.getElementById('live').textContent='구독 오류';
+        allRows = next;
+        renderTable();
+        $('#liveBadge').textContent = '실시간 연결됨';
+      }, err=>{
+        console.error(err);
+        $('#liveBadge').textContent = '구독 오류';
       });
     }
-
-    onAuthStateChanged(auth, async (user)=>{
-      if(!user){
-        document.getElementById('auth').textContent='익명 인증 중…';
-        try{ await signInAnonymously(auth); }
-        catch(e){ console.error(e); document.getElementById('auth').textContent='인증 실패'; }
-        return;
-      }
-      document.getElementById('auth').textContent='인증 완료';
-      startLive();
-    });
   </script>
 </body>
 </html>
