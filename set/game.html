@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>철자 게임 — 학생용</title>
+<style>
+  :root { --ink:#0f172a; --muted:#64748b; --border:#e2e8f0; --bg:#fff; --pill:#f1f5f9; --accent:#111827; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--ink);background:#fff}
+  header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:#fafafa}
+  header h1{font-size:16px;margin:0;font-weight:800}
+  .wrap{max-width:900px;margin:0 auto;padding:20px}
+  .card{border:1px solid var(--border);border-radius:14px;padding:18px;background:#fff}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  input,select{padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px}
+  button{appearance:none;border:1px solid #cbd5e1;background:#fff;color:#111827;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:800}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button:active{transform:translateY(1px)}
+  .hidden{display:none !important}
+  .status{font-size:12px;color:var(--muted)}
+  .word{font-size:40px;font-weight:900;letter-spacing:.3px;margin:18px 0;text-align:center}
+  .pill{font-size:12px;background:var(--pill);border-radius:999px;padding:4px 8px;margin-right:6px}
+  .center{display:flex;justify-content:center;gap:10px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>철자 게임 — 학생용</h1>
+  <div class="status" id="status">연결 중…</div>
+</header>
+
+<div class="wrap">
+
+  <!-- ① 정보 입력(필요할 때만) -->
+  <section id="setupSection" class="card hidden">
+    <h3>정보 입력</h3>
+    <div class="row">
+      <input id="classId" placeholder="반(ex. 3-2)" />
+      <input id="sid" placeholder="번호(ex. 07)" />
+      <input id="name" placeholder="이름(선택 가능)" />
+      <input id="set" placeholder="세트 ID(ex. lesson1)" />
+    </div>
+    <div class="row">
+      <button class="primary" id="startBtn">시작</button>
+    </div>
+    <div class="hint">URL에 파라미터가 없으면 이 화면이 나타납니다. 다음엔 자동으로 기억해요.</div>
+  </section>
+
+  <!-- ② 게임 영역 -->
+  <section id="gameSection" class="card hidden">
+    <div>
+      <span class="pill" id="pillClass">반 -</span>
+      <span class="pill" id="pillSid">번호 -</span>
+      <span class="pill" id="pillName">이름 -</span>
+      <span class="pill" id="pillSet">세트 -</span>
+    </div>
+    <div class="word" id="word">단어</div>
+    <div class="center">
+      <button id="btnShow">단어 보기</button>
+      <button class="primary" id="btnCorrect">맞췄다 ✔️</button>
+      <button id="btnWrong">못 맞췄다</button>
+      <button id="btnNext">다음</button>
+    </div>
+    <div class="hint" id="hint">버튼을 누르면 결과가 Firestore에 저장됩니다.</div>
+  </section>
+
+</div>
+
+<script type="module">
+// ---------- Firebase ----------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+
+// 🔴 TODO: 본인 firebaseConfig로 교체하세요
+const firebaseConfig = {
+  apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
+  authDomain: "grade-6-english-c17f3.firebaseapp.com",
+  projectId: "grade-6-english-c17f3",
+  storageBucket: "grade-6-english-c17f3.appspot.com",
+  messagingSenderId: "676305839050",
+  appId: "1:676305839050:web:a5399633e7b828883fe533"
+};
+
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ---------- Helpers ----------
+const $ = (id)=>document.getElementById(id);
+const statusEl = $("status");
+const url = new URL(location.href);
+const qp = Object.fromEntries(url.searchParams.entries());
+const LS_KEY = "classGame:v1";
+
+function uuid(){
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c=>{
+    const r = Math.random()*16|0, v = c==="x"?r:(r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+
+async function loadSet(setId){
+  const res = await fetch(`set/${encodeURIComponent(setId)}.json`, {cache:"no-cache"});
+  if(!res.ok) throw new Error("세트를 불러올 수 없습니다.");
+  const json = await res.json();
+  if(!Array.isArray(json.words) || json.words.length===0) throw new Error("세트에 단어가 없습니다.");
+  return json;
+}
+
+// ---------- State ----------
+let state = {
+  classId: qp.classId || "",
+  sid: qp.sid || "",
+  name: qp.name || "",
+  set: qp.set || "",
+  words: [],
+  current: "",
+  shownAt: 0
+};
+
+// ---------- UI ----------
+const setupSection = $("setupSection");
+const gameSection = $("gameSection");
+const wordEl = $("word");
+const pillClass = $("pillClass");
+const pillSid = $("pillSid");
+const pillName = $("pillName");
+const pillSet = $("pillSet");
+
+function needSetup(){
+  return !(state.classId && state.sid && state.set);
+}
+
+function fillPills(){
+  pillClass.textContent = `반 ${state.classId}`;
+  pillSid.textContent = `번호 ${state.sid}`;
+  pillName.textContent = `이름 ${state.name || "-"}`;
+  pillSet.textContent = `세트 ${state.set}`;
+}
+
+function showSetup(){
+  setupSection.classList.remove("hidden");
+  gameSection.classList.add("hidden");
+  $("classId").value = state.classId;
+  $("sid").value = state.sid;
+  $("name").value = state.name;
+  $("set").value = state.set || "lesson1";
+}
+
+function showGame(){
+  setupSection.classList.add("hidden");
+  gameSection.classList.remove("hidden");
+  fillPills();
+}
+
+// ---------- Game flow ----------
+function pick(){
+  if(!state.words.length) return "";
+  return state.words[Math.floor(Math.random()*state.words.length)];
+}
+
+function showNextWord(){
+  state.current = pick();
+  wordEl.textContent = state.current || "—";
+  state.shownAt = performance.now();
+}
+
+async function saveResult(correct){
+  try{
+    const durationMs = Math.max(0, Math.round(performance.now() - (state.shownAt||performance.now())));
+    const payload = {
+      classId: state.classId,
+      studentId: state.sid,
+      name: state.name || null,
+      set: state.set,
+      word: state.current,
+      correct: !!correct,
+      durationMs,
+      attemptId: uuid(),
+      createdAt: serverTimestamp(),
+      version: "v1.0"
+    };
+    await addDoc(collection(db, "results"), payload);
+    $("hint").textContent = "저장됨 ✅";
+  }catch(e){
+    $("hint").textContent = "저장 실패 ⚠️ 콘솔 확인";
+    console.error(e);
+  }
+}
+
+// ---------- Events ----------
+$("startBtn").addEventListener("click", async ()=>{
+  state.classId = $("classId").value.trim();
+  state.sid = $("sid").value.trim();
+  state.name = $("name").value.trim();
+  state.set = $("set").value.trim() || "lesson1";
+  if(!state.classId || !state.sid || !state.set){ alert("반/번호/세트를 입력해주세요."); return; }
+  localStorage.setItem(LS_KEY, JSON.stringify({classId:state.classId,sid:state.sid,name:state.name,set:state.set}));
+  await bootAndStart();
+});
+
+$("btnShow").addEventListener("click", showNextWord);
+$("btnCorrect").addEventListener("click", ()=> saveResult(true));
+$("btnWrong").addEventListener("click", ()=> saveResult(false));
+$("btnNext").addEventListener("click", showNextWord);
+
+// ---------- Boot ----------
+async function bootAndStart(){
+  try{
+    statusEl.textContent = "세트 불러오는 중…";
+    const set = await loadSet(state.set);
+    state.words = set.words;
+    statusEl.textContent = "준비 완료";
+    showGame();
+    showNextWord();
+  }catch(e){
+    statusEl.textContent = "세트 로드 실패";
+    alert(e.message);
+    showSetup();
+  }
+}
+
+onAuthStateChanged(auth, async (u)=>{
+  if(u){
+    statusEl.textContent = "Firebase 연결됨 🔌";
+    // 파라미터/로컬 복구
+    if(needSetup()){
+      try{
+        const memo = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+        state = {...state, ...memo};
+      }catch{}
+    }
+    if(needSetup()) showSetup();
+    else await bootAndStart();
+  }
+});
+signInAnonymously(auth).catch(err=>{
+  statusEl.textContent = "익명 로그인 실패";
+  console.error(err);
+});
+</script>
+</body>
+</html>
