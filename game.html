@@ -1,247 +1,431 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>철자 게임 — 학생용</title>
-<style>
-  :root { --ink:#0f172a; --muted:#64748b; --border:#e2e8f0; --bg:#fff; --pill:#f1f5f9; --accent:#111827; }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--ink);background:#fff}
-  header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:#fafafa}
-  header h1{font-size:16px;margin:0;font-weight:800}
-  .wrap{max-width:900px;margin:0 auto;padding:20px}
-  .card{border:1px solid var(--border);border-radius:14px;padding:18px;background:#fff}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
-  input,select{padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px}
-  button{appearance:none;border:1px solid #cbd5e1;background:#fff;color:#111827;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:800}
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  button:active{transform:translateY(1px)}
-  .hidden{display:none !important}
-  .status{font-size:12px;color:var(--muted)}
-  .word{font-size:40px;font-weight:900;letter-spacing:.3px;margin:18px 0;text-align:center}
-  .pill{font-size:12px;background:var(--pill);border-radius:999px;padding:4px 8px;margin-right:6px}
-  .center{display:flex;justify-content:center;gap:10px}
-  .hint{font-size:12px;color:var(--muted);margin-top:6px}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>철자 게임 – 학생 화면</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif; }
+    body { margin:0; background:#0f172a; color:#fff; }
+    header { background:#1d4ed8; padding:12px 16px; }
+    header .meta { opacity:.9; font-size:13px; margin-top:4px; }
+    main { max-width:960px; margin:20px auto; padding:0 16px; }
+
+    .hud { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .pill { background:#172554; border:1px solid #334155; padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px; }
+    .btn { border:1px solid #64748b; background:#111827; color:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
+    .btn.primary{ background:#2563eb; border-color:#2563eb; }
+    .btn.warn{ background:#991b1b; border-color:#ef4444; }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
+
+    /* 트랙 */
+    .track { position:relative; height:120px; margin:24px 0; border-radius:14px;
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.08);
+      overflow:hidden;
+    }
+    .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.1); }
+    .word { position:absolute; top:50%; transform:translateY(-50%); font-size:42px; font-weight:800; letter-spacing:.06em; white-space:nowrap;
+      text-shadow: 0 2px 6px rgba(0,0,0,.45);
+    }
+
+    .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
+
+    /* 입력 모달 */
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
+    .modal.open { display:flex; }
+    .modal .box { width:min(500px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
+    .row { display:flex; gap:8px; align-items:center; }
+    input[type="text"]{ width:100%; padding:10px 12px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#fff; font-size:16px; }
+    .muted { color:#93a4b5; font-size:12px; }
+
+    .center { text-align:center; }
+  </style>
 </head>
 <body>
-<header>
-  <h1>철자 게임 — 학생용</h1>
-  <div class="status" id="status">연결 중…</div>
-</header>
+  <header>
+    <div><strong>철자 게임</strong></div>
+    <div id="headerMeta" class="meta">파라미터 인식 중…</div>
+  </header>
 
-<div class="wrap">
-
-  <!-- ① 정보 입력(필요할 때만) -->
-  <section id="setupSection" class="card hidden">
-    <h3>정보 입력</h3>
-    <div class="row">
-      <input id="classId" placeholder="반(ex. 3-2)" />
-      <input id="sid" placeholder="번호(ex. 07)" />
-      <input id="name" placeholder="이름(선택 가능)" />
-      <input id="set" placeholder="세트 ID(ex. lesson1)" />
+  <main>
+    <div class="hud">
+      <span id="authPill" class="pill">인증 대기</span>
+      <span id="cfgPill" class="pill">설정 대기</span>
+      <span class="pill">점수 <span id="score">0</span></span>
+      <span class="pill">라운드 <span id="roundNow">0</span>/<span id="roundTotal">-</span></span>
+      <span class="pill">속도 <span id="speedNow">-</span> px/s</span>
+      <button id="btnAnswer" class="btn primary">정답 입력(Enter)</button>
+      <button id="btnGiveUp" class="btn warn">포기(Esc)</button>
     </div>
-    <div class="row">
-      <button class="primary" id="startBtn">시작</button>
+
+    <div class="track panel">
+      <div class="guide"></div>
+      <div id="wordEl" class="word" style="left:-9999px">READY</div>
     </div>
-    <div class="hint">URL에 파라미터가 없으면 이 화면이 나타납니다. 다음엔 자동으로 기억해요.</div>
-  </section>
 
-  <!-- ② 게임 영역 -->
-  <section id="gameSection" class="card hidden">
-    <div>
-      <span class="pill" id="pillClass">반 -</span>
-      <span class="pill" id="pillSid">번호 -</span>
-      <span class="pill" id="pillName">이름 -</span>
-      <span class="pill" id="pillSet">세트 -</span>
+    <div id="status" class="panel">
+      <div id="message">교사가 세션을 시작하면 자동으로 시작합니다.</div>
+      <div class="muted" style="margin-top:6px;">configs/{classId}_{set}를 구독합니다.</div>
     </div>
-    <div class="word" id="word">단어</div>
-    <div class="center">
-      <button id="btnShow">단어 보기</button>
-      <button class="primary" id="btnCorrect">맞췄다 ✔️</button>
-      <button id="btnWrong">못 맞췄다</button>
-      <button id="btnNext">다음</button>
+  </main>
+
+  <!-- 입력 모달 -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="box">
+      <div style="font-weight:800; margin-bottom:8px;">정답 입력</div>
+      <div class="row">
+        <input id="answerInput" type="text" placeholder="철자를 입력 후 Enter" autocomplete="off" />
+        <button id="submitAnswer" class="btn primary">제출</button>
+      </div>
+      <div class="muted" style="margin-top:6px;">Enter 제출 · Esc 닫기</div>
     </div>
-    <div class="hint" id="hint">버튼을 누르면 결과가 Firestore에 저장됩니다.</div>
-  </section>
+  </div>
 
-</div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, doc, getDoc, onSnapshot,
+      collection, addDoc, serverTimestamp, setDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-<script type="module">
-// ---------- Firebase ----------
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
-
-// 🔴 TODO: 본인 firebaseConfig로 교체하세요
-const firebaseConfig = {
-  apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
-  authDomain: "grade-6-english-c17f3.firebaseapp.com",
-  projectId: "grade-6-english-c17f3",
-  storageBucket: "grade-6-english-c17f3.appspot.com",
-  messagingSenderId: "676305839050",
-  appId: "1:676305839050:web:a5399633e7b828883fe533"
-};
-
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// ---------- Helpers ----------
-const $ = (id)=>document.getElementById(id);
-const statusEl = $("status");
-const url = new URL(location.href);
-const qp = Object.fromEntries(url.searchParams.entries());
-const LS_KEY = "classGame:v1";
-
-function uuid(){
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c=>{
-    const r = Math.random()*16|0, v = c==="x"?r:(r&0x3|0x8);
-    return v.toString(16);
-  });
-}
-
-async function loadSet(setId){
-  const res = await fetch(`set/${encodeURIComponent(setId)}.json`, {cache:"no-cache"});
-  if(!res.ok) throw new Error("세트를 불러올 수 없습니다.");
-  const json = await res.json();
-  if(!Array.isArray(json.words) || json.words.length===0) throw new Error("세트에 단어가 없습니다.");
-  return json;
-}
-
-// ---------- State ----------
-let state = {
-  classId: qp.classId || "",
-  sid: qp.sid || "",
-  name: qp.name || "",
-  set: qp.set || "",
-  words: [],
-  current: "",
-  shownAt: 0
-};
-
-// ---------- UI ----------
-const setupSection = $("setupSection");
-const gameSection = $("gameSection");
-const wordEl = $("word");
-const pillClass = $("pillClass");
-const pillSid = $("pillSid");
-const pillName = $("pillName");
-const pillSet = $("pillSet");
-
-function needSetup(){
-  return !(state.classId && state.sid && state.set);
-}
-
-function fillPills(){
-  pillClass.textContent = `반 ${state.classId}`;
-  pillSid.textContent = `번호 ${state.sid}`;
-  pillName.textContent = `이름 ${state.name || "-"}`;
-  pillSet.textContent = `세트 ${state.set}`;
-}
-
-function showSetup(){
-  setupSection.classList.remove("hidden");
-  gameSection.classList.add("hidden");
-  $("classId").value = state.classId;
-  $("sid").value = state.sid;
-  $("name").value = state.name;
-  $("set").value = state.set || "lesson1";
-}
-
-function showGame(){
-  setupSection.classList.add("hidden");
-  gameSection.classList.remove("hidden");
-  fillPills();
-}
-
-// ---------- Game flow ----------
-function pick(){
-  if(!state.words.length) return "";
-  return state.words[Math.floor(Math.random()*state.words.length)];
-}
-
-function showNextWord(){
-  state.current = pick();
-  wordEl.textContent = state.current || "—";
-  state.shownAt = performance.now();
-}
-
-async function saveResult(correct){
-  try{
-    const durationMs = Math.max(0, Math.round(performance.now() - (state.shownAt||performance.now())));
-    const payload = {
-      classId: state.classId,
-      studentId: state.sid,
-      name: state.name || null,
-      set: state.set,
-      word: state.current,
-      correct: !!correct,
-      durationMs,
-      attemptId: uuid(),
-      createdAt: serverTimestamp(),
-      version: "v1.0"
+    // 🔧 Firebase 프로젝트 (사용자님 값)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
+      authDomain: "grade-6-english-c17f3.firebaseapp.com",
+      projectId: "grade-6-english-c17f3",
+      storageBucket: "grade-6-english-c17f3.appspot.com",
+      messagingSenderId: "676305839050",
+      appId: "1:676305839050:web:a5399633e7b828883fe533"
     };
-    await addDoc(collection(db, "results"), payload);
-    $("hint").textContent = "저장됨 ✅";
-  }catch(e){
-    $("hint").textContent = "저장 실패 ⚠️ 콘솔 확인";
-    console.error(e);
-  }
-}
 
-// ---------- Events ----------
-$("startBtn").addEventListener("click", async ()=>{
-  state.classId = $("classId").value.trim();
-  state.sid = $("sid").value.trim();
-  state.name = $("name").value.trim();
-  state.set = $("set").value.trim() || "lesson1";
-  if(!state.classId || !state.sid || !state.set){ alert("반/번호/세트를 입력해주세요."); return; }
-  localStorage.setItem(LS_KEY, JSON.stringify({classId:state.classId,sid:state.sid,name:state.name,set:state.set}));
-  await bootAndStart();
-});
+    // 🌐 초기화
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+    const auth = getAuth(app);
 
-$("btnShow").addEventListener("click", showNextWord);
-$("btnCorrect").addEventListener("click", ()=> saveResult(true));
-$("btnWrong").addEventListener("click", ()=> saveResult(false));
-$("btnNext").addEventListener("click", showNextWord);
+    // 🧭 파라미터
+    const p = new URLSearchParams(location.search);
+    const classId = p.get("classId") || "";
+    const setId   = p.get("set") || "";
+    const sid     = p.get("sid") || "";
+    const name    = p.get("name") || "제출원";
 
-// ---------- Boot ----------
-async function bootAndStart(){
-  try{
-    statusEl.textContent = "세트 불러오는 중…";
-    const set = await loadSet(state.set);
-    state.words = set.words;
-    statusEl.textContent = "준비 완료";
-    showGame();
-    showNextWord();
-  }catch(e){
-    statusEl.textContent = "세트 로드 실패";
-    alert(e.message);
-    showSetup();
-  }
-}
+    document.getElementById("headerMeta").textContent =
+      "classId=" + (classId||"(없음)") + " · set=" + (setId||"(없음)") + " · sid=" + (sid||"(없음)") + " · " + new Date().toLocaleString("ko-KR");
 
-onAuthStateChanged(auth, async (u)=>{
-  if(u){
-    statusEl.textContent = "Firebase 연결됨 🔌";
-    // 파라미터/로컬 복구
-    if(needSetup()){
-      try{
-        const memo = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-        state = {...state, ...memo};
-      }catch{}
+    // 🧩 상태
+    const wordEl = document.getElementById("wordEl");
+    const scoreEl = document.getElementById("score");
+    const roundNowEl = document.getElementById("roundNow");
+    const roundTotalEl = document.getElementById("roundTotal");
+    const speedNowEl = document.getElementById("speedNow");
+    const statusEl = document.getElementById("status");
+    const msgEl = document.getElementById("message");
+
+    const modal = document.getElementById("modal");
+    const input = document.getElementById("answerInput");
+
+    const pointsSeq = [10,8,6,4,2];
+    let user = null;
+
+    // 게임 런타임
+    let words = [];
+    let rounds = 0;
+    let fastMin = 420, fastMax = 520, minFloor = 140;
+
+    // 현재 문제 상태
+    let running = false;
+    let curIndex = -1;       // 라운드 인덱스
+    let curWord = "";
+    let attemptIdx = 0;      // 0..4
+    let dir = "L2R";         // 'L2R' | 'R2L'
+    let speed = 0;           // px/s
+    let totalScore = 0;
+    let rafId = 0;           // animation frame id
+    let startTs = 0;         // ms
+    let posX = 0;            // px
+    let trackW = 0;          // px
+
+    function shuffle(arr){
+      const a = arr.slice();
+      for (let i=a.length-1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
     }
-    if(needSetup()) showSetup();
-    else await bootAndStart();
-  }
-});
-signInAnonymously(auth).catch(err=>{
-  statusEl.textContent = "익명 로그인 실패";
-  console.error(err);
-});
-</script>
+
+    function openModal(){
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      input.value = "";
+      input.focus();
+    }
+    function closeModal(){
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    // 익명 인증 후 config 구독
+    onAuthStateChanged(auth, async (u)=>{
+      if (!u){
+        document.getElementById("authPill").textContent = "익명 인증 중…";
+        try { await signInAnonymously(auth); } catch(e){ console.error(e); document.getElementById("authPill").textContent = "인증 실패"; }
+        return;
+      }
+      user = u;
+      document.getElementById("authPill").textContent = "인증 완료";
+      subscribeConfig();
+    });
+
+    function docId(){ return classId + "_" + setId; }
+
+    function subscribeConfig(){
+      if (!classId || !setId){
+        msgEl.textContent = "URL에 classId, set이 필요합니다. 예) ?classId=6-1&set=lesson1&sid=01&name=민수";
+        return;
+      }
+      const ref = doc(db, "configs", docId());
+      onSnapshot(ref, (snap)=>{
+        if (!snap.exists()){
+          document.getElementById("cfgPill").textContent = "설정 없음";
+          msgEl.textContent = "교사가 configs/" + docId() + " 문서를 만들어야 합니다.";
+          return;
+        }
+        const cfg = snap.data() || {};
+        words = Array.isArray(cfg.words) ? cfg.words.filter(Boolean) : [];
+        rounds = Math.max(1, Number(cfg.rounds || 1));
+        const sp = cfg.speedBase || {};
+        fastMin = Math.max(1, Number(sp.fastMin || 420));
+        fastMax = Math.max(fastMin, Number(sp.fastMax || 520));
+        minFloor= Math.max(1, Number(sp.minFloor || 140));
+        roundTotalEl.textContent = String(rounds);
+
+        document.getElementById("cfgPill").textContent = cfg.active ? "세션 활성" : "세션 중지";
+        if (!cfg.active){
+          stopAnim();
+          running = false;
+          msgEl.textContent = "세션이 중지됨. 교사가 시작을 누르면 시작합니다.";
+          wordEl.style.left = "-9999px";
+          return;
+        }
+
+        // active=true 이고, 진행 중이 아니면 스타트
+        if (!running){
+          startSession();
+        }
+      }, (err)=>{
+        console.error(err);
+        document.getElementById("cfgPill").textContent = "설정 오류";
+      });
+    }
+
+    function startSession(){
+      // 준비
+      totalScore = 0;
+      scoreEl.textContent = "0";
+      curIndex = -1;
+      running = true;
+
+      // 단어 셔플 후 rounds만큼 슬라이스(부족하면 반복)
+      let pool = words.slice();
+      if (pool.length === 0){ pool = ["start","ready","go"]; }
+      pool = shuffle(pool);
+      if (pool.length < rounds){
+        const need = rounds - pool.length;
+        // 반복 채우기
+        for (let i=0;i<need;i++) pool.push(pool[i % pool.length]);
+      } else {
+        pool = pool.slice(0, rounds);
+      }
+      words = pool;
+
+      msgEl.textContent = "게임 시작!";
+      nextProblem(true);
+    }
+
+    function nextProblem(newRound){
+      if (newRound){
+        curIndex++;
+        roundNowEl.textContent = String(curIndex+1);
+        if (curIndex >= rounds){
+          endSession();
+          return;
+        }
+        curWord = String(words[curIndex] || "");
+        attemptIdx = 0;
+        // 초기 속도: 빠른 범위에서 랜덤
+        speed = randRange(fastMin, fastMax);
+      } else {
+        // 같은 문제 재시작: 속도 10% 감소
+        speed = Math.max(minFloor, speed * 0.9);
+      }
+
+      // 방향 랜덤
+      dir = Math.random() < 0.5 ? "L2R" : "R2L";
+      speedNowEl.textContent = Math.round(speed);
+
+      // 배치
+      const track = document.querySelector(".track");
+      trackW = track.clientWidth;
+      const textW = measureTextWidth(curWord, wordEl);
+      if (dir === "L2R"){
+        posX = -textW - 12;
+      } else {
+        posX = trackW + 12;
+      }
+      wordEl.textContent = curWord;
+      wordEl.style.left = posX + "px";
+
+      // 애니메이션 시작
+      startAnim();
+    }
+
+    function startAnim(){
+      stopAnim();
+      startTs = performance.now();
+      rafId = requestAnimationFrame(tick);
+    }
+    function stopAnim(){
+      if (rafId){ cancelAnimationFrame(rafId); rafId = 0; }
+    }
+    function tick(ts){
+      const dt = (ts - startTs) / 1000; // s
+      startTs = ts;
+      const delta = speed * dt; // px
+
+      if (dir === "L2R"){
+        posX += delta;
+        wordEl.style.left = posX + "px";
+        if (posX > trackW + 40){
+          // 트랙 밖으로 나가도 자동 실패 처리하지 않음 (요구사항)
+          // 그냥 다시 반대쪽으로 재배치하면 시각적으로 끊김 → 그대로 둠
+          // 필요 시 재배치하려면 아래 1줄 주석 해제
+          // posX = -measureTextWidth(curWord, wordEl) - 12;
+        }
+      } else {
+        posX -= delta;
+        wordEl.style.left = posX + "px";
+        if (posX < -measureTextWidth(curWord, wordEl) - 40){
+          // 동일
+          // posX = trackW + 12;
+        }
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function measureTextWidth(text, el){
+      // 임시로 적용하여 대략 길이 계산
+      el.style.visibility = "hidden";
+      el.textContent = text;
+      document.body.appendChild(el);
+      const w = el.getBoundingClientRect().width || 100;
+      el.style.visibility = "visible";
+      return w;
+    }
+
+    function randRange(a,b){
+      return a + Math.random()*(b-a);
+    }
+
+    // 제출/포기 버튼
+    document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
+    document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
+    document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp(false));
+    window.addEventListener("keydown", (e)=>{
+      if (e.key === "Enter"){
+        if (modal.classList.contains("open")) submitAnswer();
+        else openModal();
+      } else if (e.key === "Escape"){
+        if (modal.classList.contains("open")) closeModal();
+        else handleWrongOrGiveUp(false);
+      }
+    });
+
+    async function submitAnswer(){
+      const val = (input.value || "").trim();
+      if (!val) return;
+      closeModal();
+      const isCorrect = normalize(val) === normalize(curWord);
+      if (isCorrect){
+        const awarded = pointsSeq[Math.min(attemptIdx, pointsSeq.length-1)];
+        totalScore += awarded;
+        scoreEl.textContent = String(totalScore);
+        await logResult({
+          isCorrect:true, points:awarded
+        });
+        // 다음 라운드로
+        nextProblem(true);
+      } else {
+        await handleWrongOrGiveUp(true);
+      }
+    }
+
+    function normalize(s){
+      return String(s).toLowerCase().replace(/\s+/g,"").trim();
+    }
+
+    async function handleWrongOrGiveUp(isWrong){
+      // 오답 또는 포기 → 같은 문제 재시도, 속도 10% 감소
+      await logResult({ isCorrect:false, points:0 });
+
+      attemptIdx++;
+      if (attemptIdx >= pointsSeq.length){
+        // 2점에서도 틀린 경우: 정답 공개 후 다음 문제
+        showReveal();
+        // 잠깐 멈춤
+        await waitMs(1000);
+        nextProblem(true);
+      } else {
+        nextProblem(false);
+      }
+    }
+
+    function showReveal(){
+      msgEl.textContent = "정답: " + curWord;
+    }
+
+    function waitMs(ms){ return new Promise(res=> setTimeout(res, ms)); }
+
+    async function logResult({isCorrect, points}){
+      try {
+        await addDoc(collection(db, "results"), {
+          classId, set: setId, sid, name,
+          word: curWord,
+          attemptIndex: attemptIdx,
+          isCorrect: !!isCorrect,
+          points: Number(points||0),
+          speed: Math.round(speed),
+          direction: dir,
+          createdAt: serverTimestamp()
+        });
+      } catch (e){
+        console.error("save result error", e);
+      }
+    }
+
+    async function endSession(){
+      running = false;
+      stopAnim();
+      wordEl.style.left = "-9999px";
+      msgEl.textContent = "세트 종료! 총점: " + totalScore;
+
+      try {
+        await addSessionSummary();
+      } catch (e){ console.error("session save error", e); }
+    }
+
+    async function addSessionSummary(){
+      const refId = [classId,setId,sid,Date.now()].join("_");
+      await setDoc(doc(db, "sessions", refId), {
+        classId, set: setId, sid, name,
+        totalPoints: totalScore,
+        rounds,
+        finishedAt: serverTimestamp()
+      });
+    }
+  </script>
 </body>
 </html>
