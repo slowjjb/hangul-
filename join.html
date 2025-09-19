@@ -24,8 +24,9 @@
     import {
       getFirestore, collection, query, where, getDocs, doc, getDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // ★ 프로젝트 값(학생/교사와 동일)
+    // ★ 프로젝트 값
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -36,28 +37,36 @@
     };
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
+    const auth = getAuth(app);
 
     // 게임 라우팅 매핑 (configs.game 값 -> 파일명)
     const GAME_ROUTES = {
       letters: "game.html",      // 기본 철자 게임
-      // 예) 다른 게임을 추가하면 아래처럼 매핑만 추가하세요.
-      // "wordfall": "wordfall.html",
+      // 예: 다른 게임 추가 시
+      // wordfall: "wordfall.html",
     };
 
     const $ = (id)=>document.getElementById(id);
     const sp = new URLSearchParams(location.search);
 
-    // UI 엘리먼트
-    const gradeSel = document.addEventListener ? null : null; // placeholder for older browsers
-    window.addEventListener("DOMContentLoaded", async () => {
-      const grade    = $("grade");
-      const classNo  = $("classNo");
-      const classIdI = $("classId");
-      const setSel   = $("set");
-      const sid      = $("sid");
-      const name     = $("name");
-      const goBtn    = $("goBtn");
-      const setNote  = $("setNote");
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        try { await signInAnonymously(auth); }
+        catch (e) { console.error(e); alert("인증 실패: " + e.message); }
+        return;
+      }
+      // 인증 후 초기화
+      init();
+    });
+
+    function init(){
+      const grade   = $("grade");
+      const classNo = $("classNo");
+      const setSel  = $("set");
+      const sid     = $("sid");
+      const name    = $("name");
+      const goBtn   = $("goBtn");
+      const setNote = $("setNote");
 
       // URL 또는 저장값 기본 채우기
       grade.value   = sp.get("grade") || localStorage.getItem("grade") || "6";
@@ -65,57 +74,68 @@
       sid.value     = localStorage.getItem("sid") || "";
       name.value    = localStorage.getItem("name") || "";
 
-      // classId 자동 구성
-      const updateClassId = () => { classIdI.value = `${grade.value}-${classNo.value}`; };
-      grade.addEventListener("change",()=>{ updateClassId(); loadSets(); });
-      classNo.addEventListener("change",()=>{ updateClassId(); loadSets(); });
-      updateClassId();
+      // classId 계산 함수(표시는 안 함)
+      const getClassId = ()=> `${grade.value}-${classNo.value}`;
 
-      // 세트 목록 불러오기
-      async function loadSets() {
+      // 반/학년 바뀌면 세트 목록 다시 로드
+      grade.addEventListener("change", loadSets);
+      classNo.addEventListener("change", loadSets);
+
+      async function loadSets(){
+        // 로딩 표시
         setSel.innerHTML = `<option value="" disabled selected>세트 목록 불러오는 중…</option>`;
-        const classId = classIdI.value.trim();
-        const q = query(collection(db,"configs"), where("classId","==",classId));
-        const snap = await getDocs(q);
-        const items = [];
-        snap.forEach(d => {
-          const data = d.data()||{};
-          if (data.set) items.push({ set: data.set, game: data.game || "letters" });
-        });
-        // 중복 제거
-        const map = new Map();
-        items.forEach(it => { map.set(it.set, it.game); });
-        setSel.innerHTML = "";
-        if (map.size === 0) {
-          setSel.innerHTML = `<option value="" disabled selected>해당 반의 세트가 없습니다</option>`;
-          setNote.textContent = "교사 페이지에서 설정을 저장하면 목록에 나타납니다.";
-          return;
-        }
         setNote.textContent = "";
-        // 옵션 채우기
-        for (const [setName, game] of map.entries()) {
-          const opt = document.createElement("option");
-          opt.value = setName;
-          opt.textContent = `${setName} ${game && game!=="letters" ? `(${game})` : ""}`;
-          setSel.appendChild(opt);
+
+        const classId = getClassId();
+        try {
+          const qy = query(collection(db,"configs"), where("classId","==",classId));
+          const snap = await getDocs(qy);
+
+          const map = new Map(); // set -> game
+          snap.forEach(d=>{
+            const data = d.data()||{};
+            if (data.set) map.set(data.set, data.game || "letters");
+          });
+
+          setSel.innerHTML = "";
+          if (map.size === 0) {
+            setSel.innerHTML = `<option value="" disabled selected>해당 반의 세트가 없습니다</option>`;
+            setNote.textContent = "교사 페이지에서 설정을 저장하면 목록에 나타납니다.";
+            return;
+          }
+
+          for (const [setName, game] of map.entries()) {
+            const opt = document.createElement("option");
+            opt.value = setName;
+            opt.textContent = `${setName}${game && game!=="letters" ? ` (${game})` : ""}`;
+            setSel.appendChild(opt);
+          }
+
+          // 저장된 set 값이 있으면 기본 선택
+          const savedSet = localStorage.getItem("set");
+          if (savedSet && map.has(savedSet)) setSel.value = savedSet;
+          else setSel.selectedIndex = 0;
+
+        } catch (err) {
+          console.error("세트 로드 실패", err);
+          setSel.innerHTML = `<option value="" disabled selected>세트 목록을 읽을 수 없습니다</option>`;
+          setNote.textContent = "네트워크/권한 문제일 수 있어요. 잠시 후 다시 시도하세요.";
         }
-        // 기본 선택: 이전 저장값 or 첫 번째
-        const savedSet = localStorage.getItem("set");
-        if (savedSet && map.has(savedSet)) setSel.value = savedSet;
-        else setSel.selectedIndex = 0;
       }
-      await loadSets();
+
+      // 최초 한 번 로드
+      loadSets();
 
       // 시작 버튼
       goBtn.addEventListener("click", async ()=>{
-        const classId = classIdI.value.trim();
+        const classId = getClassId();
         const set     = setSel.value || "";
         const sidV    = sid.value.trim();
         const nameV   = name.value.trim();
-        if (!classId) return alert("반을 선택하세요.");
-        if (!set)     return alert("세트를 선택하세요.");
-        if (!sidV)    return alert("번호(sid)를 입력하세요. 예: 01");
-        if (!nameV)   return alert("이름을 입력하세요.");
+
+        if (!set)   return alert("세트를 선택하세요.");
+        if (!sidV)  return alert("번호(sid)를 입력하세요. 예: 01");
+        if (!nameV) return alert("이름을 입력하세요.");
 
         // 저장(다음 접속 때 자동 채움)
         localStorage.setItem("grade",  grade.value);
@@ -125,8 +145,8 @@
         localStorage.setItem("sid",    sidV);
         localStorage.setItem("name",   nameV);
 
-        // 선택 세트의 game 타입을 확인해 라우팅
-        let route = "game.html"; // 기본
+        // 선택 세트의 game 타입 확인 후 라우팅
+        let route = "game.html";
         try {
           const ref = doc(db, "configs", `${classId}_${set}`);
           const snap = await getDoc(ref);
@@ -134,8 +154,7 @@
           const gameKey = (cfg.game || "letters").toString();
           route = GAME_ROUTES[gameKey] || "game.html";
         } catch (e) {
-          // 에러 시 기본 게임으로
-          console.warn("load cfg for routing error", e);
+          console.warn("라우팅용 config 로드 실패", e);
         }
 
         const q = new URLSearchParams({ classId, set, sid: sidV, name: nameV });
@@ -145,10 +164,10 @@
       // Enter 키로도 입장
       ["sid","name"].forEach(id=>{
         $(id).addEventListener("keydown", e=>{
-          if(e.key==="Enter") goBtn.click();
+          if(e.key==="Enter") $("goBtn").click();
         });
       });
-    });
+    }
   </script>
 </head>
 <body>
@@ -182,8 +201,7 @@
         </div>
       </div>
 
-      <label for="classId">반(classId)</label>
-      <input id="classId" readonly />
+      <!-- classId는 더 이상 입력/표시하지 않음 (학년/반으로 자동 계산) -->
 
       <label for="set">세트(set)</label>
       <select id="set">
