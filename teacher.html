@@ -1,151 +1,266 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>철자 게임 — 교사용 대시보드</title>
-<style>
-  :root{--border:#e2e8f0;--ink:#0f172a;--muted:#64748b;--bg:#fff;--pill:#f1f5f9;--accent:#111827}
-  *{box-sizing:border-box}
-  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--ink);background:#fff}
-  header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:#fafafa}
-  header h1{font-size:16px;margin:0;font-weight:800}
-  .wrap{max-width:1100px;margin:0 auto;padding:16px}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
-  input,select{padding:8px 10px;border:1px solid var(--border);border-radius:10px}
-  button{appearance:none;border:1px solid #cbd5e1;background:#fff;color:#111827;padding:8px 12px;border-radius:10px;cursor:pointer;font-weight:700}
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  table{width:100%;border-collapse:collapse;margin-top:12px}
-  th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;font-size:14px}
-  th{background:#f8fafc}
-  .pill{font-size:12px;background:var(--pill);border-radius:999px;padding:4px 8px;margin-right:6px}
-  .muted{color:var(--muted);font-size:12px}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>교사 대시보드 – 실시간 결과</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif; }
+    body { margin: 0; background:#f7f7fb; color:#222; }
+    header { background:#2b67f6; color:#fff; padding:16px 20px; }
+    header .sub { opacity:.9; font-size:14px; margin-top:4px }
+    main { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .card { background:#fff; border:1px solid #e6e6ef; border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.04);}
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .pill { background:#eef3ff; color:#2b67f6; padding:6px 10px; border-radius:999px; font-weight:600; }
+    .muted { color:#666; }
+    .error { color:#b00020; font-weight:700; }
+    .ok { color:#0a7f3f; font-weight:700; }
+    table { width:100%; border-collapse: collapse; margin-top:12px; }
+    th, td { border-bottom:1px solid #eee; padding:10px 8px; text-align:left; }
+    th { font-size:13px; color:#555; background:#fafbff; position:sticky; top:0; }
+    tbody tr:hover { background:#fafcff; }
+    .right { text-align:right; }
+    .small { font-size:12px; color:#666; }
+    .flex { display:flex; gap:8px; align-items:center; }
+    .badge { background:#f1f1f8; padding:2px 8px; border-radius:8px; font-size:12px; }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin:8px 0 2px; }
+    input[type="search"]{ padding:8px 10px; border:1px solid #dfe3ee; border-radius:10px; width:260px; }
+    .hint { font-size:12px; color:#666; margin-top:6px; }
+    .footer { margin-top:20px; font-size:12px; color:#777; }
+  </style>
 </head>
 <body>
-<header>
-  <h1>철자 게임 — 교사용 대시보드</h1>
-  <div class="muted" id="status">연결 중…</div>
-</header>
+  <header>
+    <div class="row">
+      <h1 style="margin:0;">교사 대시보드</h1>
+    </div>
+    <div class="sub" id="headerMeta">파라미터 인식 중…</div>
+  </header>
 
-<div class="wrap">
-  <div class="row">
-    <input id="classId" placeholder="반(ex. 3-2)" />
-    <input id="set" placeholder="세트(ex. lesson1)" />
-    <button class="primary" id="btnApply">필터 적용</button>
-    <button id="btnExport">CSV 내보내기</button>
-  </div>
+  <main>
+    <div class="card">
+      <div class="toolbar">
+        <div class="flex">
+          <span class="pill" id="statusPill">인증 대기</span>
+          <span id="liveState" class="badge">실시간 구독 준비중</span>
+        </div>
+        <input type="search" id="searchBox" placeholder="이름·sid로 검색" />
+      </div>
+      <div id="notice" class="hint">
+        URL 예시: <code>?classId=6-1&set=lesson1</code> — 두 값이 모두 있어야 정확히 필터링됩니다.
+      </div>
 
-  <div class="row">
-    <span class="pill" id="pillSummary">—</span>
-  </div>
+      <table>
+        <thead>
+          <tr>
+            <th>이름</th>
+            <th>SID</th>
+            <th>반</th>
+            <th>세트</th>
+            <th>점수</th>
+            <th>정답/시도</th>
+            <th>소요</th>
+            <th>제출시각</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8" class="small">데이터를 불러오는 중…</td></tr>
+        </tbody>
+      </table>
 
-  <table id="tbl">
-    <thead>
-      <tr>
-        <th>시간</th><th>반</th><th>번호</th><th>이름</th><th>세트</th><th>단어</th><th>정답</th><th>소요(ms)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
+      <div class="footer" id="footerInfo"></div>
+    </div>
+  </main>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-import { getFirestore, collection, query, where, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+  <script type="module">
+    // --- 1) Firebase SDK (v9 모듈)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-/* === firebaseConfig (당신 프로젝트 값 반영) === */
+// --- 2) 프로젝트 설정 (※ 본인 값으로 교체하세요)
 const firebaseConfig = {
-  apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
-  authDomain: "grade-6-english-c17f3.firebaseapp.com",
-  projectId: "grade-6-english-c17f3",
-  storageBucket: "grade-6-english-c17f3.appspot.com",
-  messagingSenderId: "676305839050",
-  appId: "1:676305839050:web:a5399633e7b828883fe533"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID",
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 
-const $ = (id)=>document.getElementById(id);
-const statusEl = $("status");
-const url = new URL(location.href);
-const qp = Object.fromEntries(url.searchParams.entries());
-$("classId").value = qp.classId || "";
-$("set").value = qp.set || "";
+    // --- 3) 공통 유틸
+    const $ = (sel) => document.querySelector(sel);
+    const params = new URLSearchParams(location.search);
+    const classId = params.get('classId') || '';
+    const setId   = params.get('set') || '';
 
-let unsub = null;
+    $('#headerMeta').textContent = `classId=${classId || '(없음)'} · set=${setId || '(없음)'}  |  ${new Date().toLocaleString('ko-KR')}`;
 
-function formatTime(ts){
-  if(!ts) return "-";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleString();
-}
+    // --- 4) Firebase init
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+    const auth = getAuth(app);
 
-function apply(){
-  const cid = $("classId").value.trim();
-  const set = $("set").value.trim();
-  if(!cid) { alert("반(classId)을 입력하세요."); return; }
+    // --- 5) 전역 상태
+    let unsub = null;
+    let allRows = [];  // 스냅샷 원본 저장 → 검색/클라 정렬에 사용
 
-  if(typeof unsub === "function") unsub();
+    // --- 6) KST 시각 포맷
+    const toKST = (date) => {
+      if (!date) return '';
+      try {
+        return new Intl.DateTimeFormat('ko-KR', {
+          dateStyle: 'short', timeStyle: 'medium', timeZone: 'Asia/Seoul'
+        }).format(date);
+      } catch { return date.toLocaleString('ko-KR'); }
+    };
 
-  const col = collection(db, "results");
-  let q = query(col, where("classId","==",cid), orderBy("createdAt","desc"), limit(500));
-  if(set) q = query(col, where("classId","==",cid), where("set","==",set), orderBy("createdAt","desc"), limit(500));
+    // --- 7) createdAt 파싱(서버타임스탬프/ISO/Number 대응)
+    const toDateSafe = (v) => {
+      if (!v) return null;
+      // Firestore Timestamp
+      if (typeof v === 'object' && typeof v.seconds === 'number') {
+        return new Date(v.seconds * 1000 + Math.floor((v.nanoseconds || 0)/1e6));
+      }
+      // ISO 문자열 또는 숫자(epoch ms)
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    };
 
-  const tbody = $("tbl").querySelector("tbody");
-  unsub = onSnapshot(q, (snap)=>{
-    tbody.innerHTML = "";
-    let total=0, correct=0;
-    snap.forEach(doc=>{
-      const r = doc.data();
-      total++; if(r.correct) correct++;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${formatTime(r.createdAt)}</td>
-        <td>${r.classId||"-"}</td>
-        <td>${r.studentId||"-"}</td>
-        <td>${r.name||"-"}</td>
-        <td>${r.set||"-"}</td>
-        <td>${r.word||"-"}</td>
-        <td>${r.correct ? "O" : "X"}</td>
-        <td>${r.durationMs ?? "-"}</td>
-      `;
-      tbody.appendChild(tr);
+    // --- 8) 테이블 렌더
+    function renderTable() {
+      const q = ($('#searchBox').value || '').trim().toLowerCase();
+
+      // (A) setId는 클라이언트에서 최종 필터(인덱스 없이 우선 동작)
+      let rows = allRows.filter(r => !setId || (r.set === setId));
+
+      // (B) 검색어 필터 (이름/ sid)
+      if (q) {
+        rows = rows.filter(r => (r.name || '').toLowerCase().includes(q) || (r.sid || '').toLowerCase().includes(q));
+      }
+
+      // (C) 클라이언트 정렬: createdAt desc → 없으면 맨 뒤
+      rows.sort((a, b) => {
+        const ad = toDateSafe(a.createdAt);
+        const bd = toDateSafe(b.createdAt);
+        const at = ad ? ad.getTime() : -1;
+        const bt = bd ? bd.getTime() : -1;
+        return bt - at;
+      });
+
+      // 렌더
+      const tbody = $('#tbody');
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="small">표시할 데이터가 없습니다.</td></tr>`;
+        return;
+      }
+
+      const html = rows.map(r => {
+        const d = toDateSafe(r.createdAt);
+        let ratio = '';
+        if (typeof r.correct === 'number' && typeof r.attempts === 'number') {
+          ratio = `${r.correct}/${r.attempts}`;
+        } else if (typeof r.attempts === 'number') {
+          ratio = `-/${r.attempts}`;
+        } else {
+          ratio = '-';
+        }
+        const timeSpent = (typeof r.timeSpentSec === 'number') ? `${r.timeSpentSec}s` : (r.timeSpent || '');
+
+        return `<tr>
+          <td>${escapeHTML(r.name || '')}</td>
+          <td>${escapeHTML(r.sid || '')}</td>
+          <td>${escapeHTML(r.classId || '')}</td>
+          <td>${escapeHTML(r.set || '')}</td>
+          <td class="right">${(r.score ?? r.points ?? '')}</td>
+          <td>${ratio}</td>
+          <td>${escapeHTML(timeSpent)}</td>
+          <td>${d ? toKST(d) : ''}</td>
+        </tr>`;
+      }).join('');
+      tbody.innerHTML = html;
+
+      $('#footerInfo').textContent = `표시: ${rows.length}건  (원본: ${allRows.length}건)`;
+    }
+
+    // XSS 방지용
+    function escapeHTML(s) {
+      return String(s)
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'","&#039;");
+    }
+
+    // --- 9) 실시간 구독 시작(인증 이후)
+    async function startLive() {
+      if (!classId) {
+        $('#notice').innerHTML = `<span class="error">URL에 <code>classId</code>가 필요합니다.</span> 예: <code>?classId=6-1&set=lesson1</code>`;
+        return;
+      }
+
+      // 인덱스 없이 우선 동작: 서버 쿼리는 classId 하나만 where, set은 클라 필터
+      const col = collection(db, 'results');
+      const qRef = query(col, where('classId', '==', classId));
+
+      // 기존 구독 해제
+      if (typeof unsub === 'function') unsub();
+
+      $('#liveState').textContent = '실시간 구독 연결중…';
+
+      unsub = onSnapshot(qRef, (snap) => {
+        $('#liveState').textContent = '실시간 연결됨';
+        const next = [];
+        snap.forEach(doc => {
+          const data = doc.data() || {};
+          next.push({
+            id: doc.id,
+            classId: data.classId,
+            set: data.set,
+            sid: data.sid,
+            name: data.name,
+            score: data.score,
+            points: data.points,
+            correct: data.correct,
+            attempts: data.attempts,
+            timeSpent: data.timeSpent,
+            timeSpentSec: data.timeSpentSec,
+            createdAt: data.createdAt ?? data.submittedAt ?? data.timestamp ?? null, // 다양한 필드명 대응
+          });
+        });
+        allRows = next;
+        renderTable();
+      }, (err) => {
+        console.error(err);
+        $('#liveState').textContent = '구독 오류';
+        $('#notice').innerHTML = `<span class="error">실시간 구독 오류:</span> ${escapeHTML(err.message)}<br>
+          <span class="hint">만약 <code>where('classId','==',…)</code> 외에 <code>where('set','==',…)</code>나 <code>orderBy('createdAt')</code>를 추가했다면, Firestore가 요청하는 인덱스를 생성해야 합니다(콘솔 에러의 링크 클릭).</span>`;
+      });
+    }
+
+    // --- 10) 인증 가드: 익명 로그인 완료 후만 쿼리 실행
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        $('#statusPill').textContent = '익명 인증 진행중…';
+        try {
+          await signInAnonymously(auth);
+          // 로그인 성공 시 onAuthStateChanged가 다시 호출됩니다.
+        } catch (e) {
+          console.error(e);
+          $('#statusPill').textContent = '인증 실패';
+          $('#notice').innerHTML = `<span class="error">익명 인증 실패:</span> ${escapeHTML(e.message)}`;
+        }
+        return;
+      }
+      $('#statusPill').textContent = '인증 완료';
+      startLive(); // 인증됐으니 이제 쿼리/구독 시작
     });
-    const rate = total ? Math.round(correct/total*100) : 0;
-    $("pillSummary").textContent = `총 ${total}건 · 정답 ${correct}건 (${rate}%)`;
-    statusEl.textContent = `실시간 수신: ${total}건`;
-  }, (err)=>{
-    console.error(err);
-    statusEl.textContent = "구독 오류";
-  });
-}
 
-$("btnApply").addEventListener("click", apply);
-
-$("btnExport").addEventListener("click", ()=>{
-  const rows = [["time","classId","studentId","name","set","word","correct","durationMs"]];
-  const trs = $("tbl").querySelectorAll("tbody tr");
-  trs.forEach(tr=>{
-    const tds = [...tr.children].map(td=> `"${String(td.textContent).replace(/"/g,'""')}"`);
-    rows.push(tds);
-  });
-  const csv = rows.map(r=>r.join(",")).join("\n");
-  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "results.csv";
-  a.click();
-  URL.revokeObjectURL(a.href);
-});
-
-onAuthStateChanged(auth, (u)=>{
-  if(u){ statusEl.textContent = "Firebase 연결됨 🔌"; if($("classId").value) apply(); }
-});
-signInAnonymously(auth).catch(e=>{ statusEl.textContent = "익명 로그인 실패"; console.error(e); });
-</script>
+    // --- 11) 검색 이벤트
+    $('#searchBox').addEventListener('input', () => renderTable());
+  </script>
 </body>
 </html>
