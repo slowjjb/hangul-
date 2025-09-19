@@ -227,30 +227,48 @@
     }
 
     // === 글자 단위 렌더링 ===
-    function buildLetters(word){
-      clearLetters();
-      refreshFont();
+function buildLetters(word){
+  // 1) 초기화
+  clearLetters();
 
-      let x = 0;
-      for (let i=0;i<word.length;i++){
-        const ch = document.createElement("span");
-        ch.className = "ch";
-        ch.textContent = word[i];
-        wordEl.appendChild(ch);
-        chSpans.push(ch);
+  // 2) 글자 span을 미리 숨긴 채로 DOM에 붙여 '실제 렌더 폭'을 측정
+  chSpans = [];
+  offsets = [];
 
-        // Canvas로 폭 측정(가변폭 글꼴 정확)
-        const w = Math.ceil(ctx.measureText(word[i]).width || 24);
-        offsets.push(x);
-        x += w + GAP;
-      }
-      groupWidth = Math.max(0, x - GAP); // 마지막 간격 제거
+  for (let i = 0; i < word.length; i++) {
+    const ch = document.createElement("span");
+    ch.className = "ch";
+    ch.textContent = word[i];
 
-      // 첫 프레임 위치 초기화(겹쳐 보이지 않게)
-      for (let i=0;i<chSpans.length;i++){
-        chSpans[i].style.left = (dir==="L2R" ? (-groupWidth-12+offsets[i]) : (track.clientWidth+groupWidth+12-offsets[i])) + "px";
-      }
-    }
+    // 보이지 않게 먼저 붙여 폭 측정 가능하게 함
+    ch.style.visibility = "hidden";
+    ch.style.left = "-99999px";
+
+    wordEl.appendChild(ch);
+    chSpans.push(ch);
+  }
+
+  // 3) 강제 리플로우 후 폭 측정 → 누적 오프셋 계산
+  let x = 0;
+  for (let i = 0; i < chSpans.length; i++) {
+    const w = Math.ceil(chSpans[i].getBoundingClientRect().width || 24);
+    offsets.push(x);
+    x += w + 4;     // 글자 간격 4px (GAP)
+  }
+  groupWidth = Math.max(0, x - 4); // 마지막 간격 제거
+
+  // 4) 시작 위치 세팅(방향별) + 보이도록 전환
+  const startFromLeft = (dir === "L2R");
+  const trackWidth = track.clientWidth;
+
+  for (let i = 0; i < chSpans.length; i++) {
+    chSpans[i].style.visibility = "visible";
+    const base = startFromLeft ? (-groupWidth - 12) : (trackWidth + groupWidth + 12);
+    const xPos = startFromLeft ? (base + offsets[i]) : (base - offsets[i]);
+    chSpans[i].style.left = xPos + "px";
+  }
+}
+
     function clearLetters(){ wordEl.innerHTML=""; chSpans=[]; offsets=[]; groupWidth=0; }
 
     // 애니메이션
