@@ -25,7 +25,7 @@
     }
     .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.1); }
 
-    /* 글자 컨테이너: 스팬의 left 기준이 되도록 relative */
+    /* 글자 컨테이너는 상대배치 → 내부 span.left 기준 고정 */
     .word { position:relative; height:100%; pointer-events:none; }
     .ch {
       position:absolute;
@@ -93,7 +93,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // Firebase
+    /* ---------- Firebase ---------- */
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -102,12 +102,11 @@
       messagingSenderId: "676305839050",
       appId: "1:676305839050:web:a5399633e7b828883fe533"
     };
-
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
     const auth = getAuth(app);
 
-    // URL
+    /* ---------- URL 파라미터 ---------- */
     const p = new URLSearchParams(location.search);
     const classId = p.get("classId") || "";
     const setId   = p.get("set") || "";
@@ -116,7 +115,7 @@
     document.getElementById("headerMeta").textContent =
       "classId=" + (classId||"(없음)") + " · set=" + (setId||"(없음)") + " · sid=" + (sid||"(없음)") + " · " + new Date().toLocaleString("ko-KR");
 
-    // DOM
+    /* ---------- DOM ---------- */
     const track = document.getElementById("track");
     const wordEl = document.getElementById("wordEl");
     const scoreEl = document.getElementById("score");
@@ -127,11 +126,12 @@
     const modal = document.getElementById("modal");
     const input = document.getElementById("answerInput");
 
-    // 규칙
+    /* ---------- 게임 상수 (stagger 방식) ---------- */
     const pointsSeq = [10,8,6,4,2];
-    const GAP = 4;
+    const LETTER_SPACING_PX = 36;  // 글자 간격(픽셀)
+    const EDGE_MARGIN_PX    = 40;  // 화면 밖 시작/종료 여유
 
-    // 설정/런타임
+    /* ---------- 상태 ---------- */
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
@@ -141,10 +141,10 @@
     let dir = "L2R"; let speed = 0; let totalScore = 0;
 
     // 애니메이션 상태
-    let rafId = 0, startTs = 0, headX = 0;
-    let chSpans = [], offsets = [], groupWidth = 0;
+    let rafId = 0, startTs = 0;
+    let chSpans = [];
 
-    // 인증 → 설정 구독
+    /* ---------- 인증 → 설정 구독 ---------- */
     onAuthStateChanged(auth, async (u)=>{
       if (!u){
         setPill("authPill","익명 인증 중…");
@@ -183,6 +183,7 @@
       }, (err)=>{ console.error(err); setPill("cfgPill","설정 오류"); });
     }
 
+    /* ---------- 세션/문제 진행 ---------- */
     function startSession(){
       totalScore=0; scoreEl.textContent="0";
       curIndex=-1; running=true;
@@ -198,73 +199,66 @@
         roundNowEl.textContent = String(curIndex+1);
         curWord = String(words[curIndex]||"");
         attemptIdx = 0;
-        speed = rand(fastMin, fastMax);
+        speed = rand(fastMin, fastMax);       // 빠르게 시작
       } else {
-        speed = Math.max(minFloor, speed*0.9);
+        speed = Math.max(minFloor, speed*0.9); // 10% 감속
       }
       dir = Math.random()<0.5 ? "L2R" : "R2L";
       speedNowEl.textContent = Math.round(speed);
 
-      buildLetters(curWord);           // ← 글자 단위 렌더
-      headX = (dir==="L2R") ? (-groupWidth - 12) : (track.clientWidth + groupWidth + 12);
-      startAnim();
+      buildLetters(curWord); // 글자 스팬 생성(측정 불필요)
+      startAnim();           // stagger 기반 애니메이션
     }
 
-    /* ========= 글자 단위 렌더링(실제 폭 측정) ========= */
+    /* ---------- 글자 렌더링 (폭 측정 없이) ---------- */
     function buildLetters(word){
       clearLetters();
-
-      // 1) 글자 span을 숨겨서 먼저 붙임(실제 렌더 폭 측정용)
+      chSpans = [];
       for (let i=0; i<word.length; i++){
         const ch = document.createElement("span");
         ch.className = "ch";
         ch.textContent = word[i];
-        ch.style.visibility = "hidden";
-        ch.style.left = "-99999px";
+        ch.style.left = "-99999px"; // tick에서 위치 결정
         wordEl.appendChild(ch);
         chSpans.push(ch);
       }
-
-      // 2) 강제 리플로우 → 개별 폭 측정 → 누적 오프셋 계산
-      let x = 0;
-      offsets = [];
-      for (let i=0; i<chSpans.length; i++){
-        const w = Math.ceil(chSpans[i].getBoundingClientRect().width || 24);
-        offsets.push(x);
-        x += w + GAP;
-      }
-      groupWidth = Math.max(0, x - GAP);
-
-      // 3) 시작 위치 세팅(방향별) + 보이도록 전환
-      const startFromLeft = (dir === "L2R");
-      const trackW = track.clientWidth;
-      const base = startFromLeft ? (-groupWidth - 12) : (trackW + groupWidth + 12);
-
-      for (let i=0; i<chSpans.length; i++){
-        chSpans[i].style.visibility = "visible";
-        chSpans[i].style.left = (startFromLeft ? (base + offsets[i]) : (base - offsets[i])) + "px";
-      }
     }
-    function clearLetters(){ wordEl.innerHTML=""; chSpans=[]; offsets=[]; groupWidth=0; }
+    function clearLetters(){ wordEl.innerHTML=""; chSpans=[]; }
 
-    // 애니메이션
-    function startAnim(){ stopAnim(); startTs=performance.now(); rafId=requestAnimationFrame(tick); }
+    /* ---------- 애니메이션 (stagger 방식) ---------- */
+    function startAnim(){
+      stopAnim();
+      startTs = performance.now();
+      rafId = requestAnimationFrame(tick);
+    }
     function stopAnim(){ if (rafId){ cancelAnimationFrame(rafId); rafId=0; } }
-    function tick(t){
-      const dt=(t-startTs)/1000; startTs=t;
-      const d= speed*dt;
 
-      if (dir==="L2R"){
-        headX += d;
-        for (let i=0;i<chSpans.length;i++) chSpans[i].style.left = (headX + offsets[i]) + "px";
-      } else {
-        headX -= d;
-        for (let i=0;i<chSpans.length;i++) chSpans[i].style.left = (headX - offsets[i]) + "px";
+    function tick(now){
+      const elapsed = (now - startTs) / 1000;             // 전체 경과 시간(s)
+      const v = Math.max(1, speed);
+      const delay = LETTER_SPACING_PX / v;                 // 글자 간 출발 지연(s)
+
+      const W = track.clientWidth;
+      const baseL = -EDGE_MARGIN_PX;                       // L2R 시작 x
+      const baseR = W + EDGE_MARGIN_PX;                    // R2L 시작 x
+
+      for (let i = 0; i < chSpans.length; i++){
+        const t = elapsed - i * delay;                     // i번째 글자의 출발 후 경과
+        if (t <= 0){
+          chSpans[i].style.left = (dir === "L2R" ? baseL : baseR) + "px";
+          continue;
+        }
+        const d = v * t;                                   // 이동 거리(px)
+        let x;
+        if (dir === "L2R") x = baseL + d;
+        else               x = baseR - d;
+        chSpans[i].style.left = x + "px";
       }
-      rafId=requestAnimationFrame(tick);
+
+      rafId = requestAnimationFrame(tick);
     }
 
-    // 입력/판정
+    /* ---------- 입력/판정 ---------- */
     document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
     document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
     document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp());
@@ -275,9 +269,6 @@
     function openModal(){ modal.classList.add("open"); modal.setAttribute("aria-hidden","false"); input.value=""; input.focus(); }
     function closeModal(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden","true"); }
     function normalize(s){ return String(s).toLowerCase().replace(/\s+/g,"").trim(); }
-    function rand(a,b){ return a + Math.random()*(b-a); }
-    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]];} return x; }
-    const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
     async function submitAnswer(){
       const val=(input.value||"").trim(); if (!val) return;
@@ -300,10 +291,11 @@
         await sleep(900);
         nextProblem(true);
       } else {
-        nextProblem(false);
+        nextProblem(false); // 같은 문제 재시작(감속)
       }
     }
 
+    /* ---------- 결과 저장 ---------- */
     async function log({isCorrect, points}){
       try{
         await addDoc(collection(db,"results"), {
@@ -331,6 +323,11 @@
         });
       }catch(e){ console.error("session save error", e); }
     }
+
+    /* ---------- 유틸 ---------- */
+    function rand(a,b){ return a + Math.random()*(b-a); }
+    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]];} return x; }
+    const sleep = ms=>new Promise(r=>setTimeout(r,ms));
   </script>
 </body>
 </html>
