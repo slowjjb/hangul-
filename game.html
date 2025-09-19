@@ -9,7 +9,9 @@
     body { margin:0; background:#0f172a; color:#fff; }
     header { background:#1d4ed8; padding:12px 16px; }
     header .meta { opacity:.9; font-size:13px; margin-top:4px; }
-    main { max-width:1200px; margin:20px auto; padding:0 16px; }
+
+    /* 게임 영역을 더 넓고 높게 */
+    main { max-width:1280px; margin:20px auto; padding:0 16px; }
 
     .hud { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .pill { background:#172554; border:1px solid #334155; padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px; }
@@ -18,28 +20,32 @@
     .btn.warn{ background:#991b1b; border-color:#ef4444; }
     .btn:disabled{ opacity:.6; cursor:not-allowed; }
 
-    /* 훨씬 넓은 트랙 */
-    .track { position:relative; height:240px; margin:24px 0; border-radius:14px;
+    /* ▶ 트랙: 높이를 크게, 위아래도 넓게 움직이도록 */
+    .track {
+      position:relative;
+      height:420px;               /* << 기존 대비 크게 */
+      margin:24px 0;
+      border-radius:14px;
       background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
       border:1px solid rgba(255,255,255,.08);
       overflow:hidden;
     }
-    .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.1); }
+    .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.08); }
 
     .word { position:relative; height:100%; pointer-events:none; }
     .ch {
       position:absolute;
-      top:50%;
+      /* top은 각 글자마다 랜덤 부여 */
       transform:translateY(-50%);
-      font-size:48px; font-weight:800; letter-spacing:.06em; white-space:pre;
+      font-size:56px; font-weight:800; letter-spacing:.06em; white-space:pre;
       text-shadow: 0 2px 6px rgba(0,0,0,.45);
-      will-change: left;
+      will-change: left, top;
     }
 
     .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
     .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
     .modal.open { display:flex; }
-    .modal .box { width:min(500px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
+    .modal .box { width:min(520px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
     .row { display:flex; gap:8px; align-items:center; }
     input[type="text"]{ width:100%; padding:10px 12px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#fff; font-size:16px; }
     .muted { color:#93a4b5; font-size:12px; }
@@ -57,7 +63,7 @@
       <span id="cfgPill" class="pill">설정 대기</span>
       <span class="pill">점수 <span id="score">0</span></span>
       <span class="pill">라운드 <span id="roundNow">0</span>/<span id="roundTotal">-</span></span>
-      <span class="pill">속도 <span id="speedNow">-</span> px/s</span>
+      <span class="pill">평균 속도 <span id="speedNow">-</span> px/s</span>
       <button id="btnAnswer" class="btn primary">정답 입력(Enter)</button>
       <button id="btnGiveUp" class="btn warn">포기(Esc)</button>
     </div>
@@ -73,7 +79,7 @@
     </div>
   </main>
 
-  <!-- 입력 모달 -->
+  <!-- 정답 입력 모달 -->
   <div id="modal" class="modal" aria-hidden="true">
     <div class="box">
       <div style="font-weight:800; margin-bottom:8px;">정답 입력</div>
@@ -113,7 +119,7 @@
     const sid     = p.get("sid") || "";
     const name    = p.get("name") || "제출원";
     document.getElementById("headerMeta").textContent =
-      "classId=" + (classId||"(없음)") + " · set=" + (setId||"(없음)") + " · sid=" + (sid||"(없음)") + " · " + new Date().toLocaleString("ko-KR");
+      `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · ${new Date().toLocaleString("ko-KR")}`;
 
     /* ---------- DOM ---------- */
     const track = document.getElementById("track");
@@ -127,11 +133,12 @@
     const input = document.getElementById("answerInput");
 
     /* ---------- 규칙/상수 ---------- */
-    const pointsSeq = [10,8,6,4,2];
-    const RESPAWN_JITTER = 0.6;     // 재출발 최대 지연(초) – 흐름 자연스럽게
-    const OUT_MARGIN = 400;         // 화면 밖 출발/종료 여유(px) → 아주 넓게 이동
+    const pointsSeq = [10,8,6,4,2];       // 시도별 점수
+    const OUT_MARGIN = 420;               // 화면 밖으로 충분히 나가게
+    const TOP_PADDING = 36;               // 위아래 여백(글자 겹침 방지)
+    const START_JITTER = 0.45;            // 각 글자 출발 시점 랜덤지연(초)
 
-    /* ---------- 설정/런타임 ---------- */
+    /* ---------- 상태 ---------- */
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
@@ -140,10 +147,14 @@
     let curIndex = -1, curWord = "", attemptIdx = 0;
     let totalScore = 0;
 
-    // 글자 오브젝트: {el, side:'L'|'R', speed, startTime}
+    // 속도 스케일(오답/포기 시 10% 감소)
+    let speedScale = 1.0;
+
+    // 글자 오브젝트: {el, side:'L'|'R', speed, startTime, top}
     let letters = [];
     let rafId = 0;
-    let startTs = 0; // 문제 시작 시각
+    let startTs = 0;
+    let animFinished = false;   // 이번 문제에서 "한 번" 이동이 끝났는지
 
     /* ---------- 인증 → 설정 구독 ---------- */
     onAuthStateChanged(auth, async (u)=>{
@@ -158,7 +169,7 @@
     });
 
     function setPill(id, t){ document.getElementById(id).textContent = t; }
-    function docId(){ return classId + "_" + setId; }
+    function docId(){ return `${classId}_${setId}`; }
 
     function subscribeConfig(){
       if (!classId || !setId){
@@ -172,7 +183,7 @@
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
         rounds = Math.min(reqRounds, Math.max(1, words.length)); // 단어 수 초과 방지
         const sp=cfg.speedBase||{};
-        fastMin = Math.max(140, Number(sp.fastMin||420));  // 너무 느리지 않게 바닥 상향
+        fastMin = Math.max(160, Number(sp.fastMin||420));  // 초기 속도가 너무 느려지지 않게 상향
         fastMax = Math.max(fastMin, Number(sp.fastMax||520));
         minFloor= Math.max(120, Number(sp.minFloor||140));
         roundTotalEl.textContent = String(rounds);
@@ -186,28 +197,26 @@
 
     /* ---------- 세션/문제 진행 ---------- */
     function startSession(){
-      totalScore=0; scoreEl.textContent="0";
-      curIndex=-1; running=true;
+      totalScore = 0; scoreEl.textContent = "0";
+      curIndex = -1; running = true;
       words = shuffle(words).slice(0, rounds);
-      msgEl.textContent="게임 시작!";
+      msgEl.textContent = "게임 시작!";
       nextProblem(true);
     }
 
     function nextProblem(newRound){
       if (newRound){
         curIndex++;
-        if (curIndex>=rounds){ endSession(); return; }
+        if (curIndex >= rounds){ endSession(); return; }
         roundNowEl.textContent = String(curIndex+1);
-        curWord = String(words[curIndex]||"");
+        curWord = String(words[curIndex] || "");
         attemptIdx = 0;
+        speedScale = 1.0;         // 새 단어 시작 시 초기화
       } else {
-        // 같은 문제 재시작: 모든 글자 속도 10% 감속(바닥 보장)
-        for (const L of letters){
-          L.speed = Math.max(minFloor, L.speed * 0.9);
-        }
+        // 같은 문제 재시작: 전체 속도 10% 감속 (바닥 보장)
+        speedScale = Math.max(minFloor / fastMax, speedScale * 0.9);
       }
-      speedNowEl.textContent = "~"; // 개별 속도이므로 평균 표시는 생략
-
+      // 평균 속도 표기용은 buildLetters에서 계산
       buildLetters(curWord);
       startAnim();
     }
@@ -215,75 +224,79 @@
     function buildLetters(word){
       clearLetters();
       letters = [];
+      animFinished = false;
+
       const W = track.clientWidth;
+      const H = track.clientHeight;
 
       for (let i=0; i<word.length; i++){
         const el = document.createElement("span");
         el.className = "ch";
         el.textContent = word[i];
+
+        // 위아래로 넓게 분포하도록 top을 랜덤 (여백 두기)
+        const top = rand(TOP_PADDING, H - TOP_PADDING);
+        el.style.top = top + "px";
+
+        // 시작은 화면 밖
         el.style.left = "-99999px";
         wordEl.appendChild(el);
 
-        // 각 글자별 랜덤 속도, 시작 방향, 출발 지연
+        // 각 글자별 랜덤: 방향/속도/출발지연
         const side = Math.random() < 0.5 ? "L" : "R";
-        const speed = rand(fastMin, fastMax);       // px/s
-        const startTime = Math.random() * 0.6;      // 0~0.6초 사이 랜덤 지연
+        const baseSpeed = rand(fastMin, fastMax);          // px/s
+        const speed = Math.max(minFloor, baseSpeed * speedScale);
+        const startTime = Math.random() * START_JITTER;    // 0 ~ 0.45s
 
-        letters.push({ el, side, speed, startTime });
+        letters.push({ el, side, speed, startTime, top });
       }
 
-      // 평균 속도 표시(정보용)
-      const avg = Math.round(letters.reduce((s,l)=>s+l.speed,0)/letters.length);
-      speedNowEl.textContent = `~${avg} px/s`;
+      // 평균 속도 표시
+      const avg = Math.round(letters.reduce((s,l)=>s+l.speed,0)/Math.max(1,letters.length));
+      speedNowEl.textContent = `${avg}`;
 
       startTs = performance.now();
     }
 
     function clearLetters(){ wordEl.innerHTML=""; letters=[]; }
 
-    /* ---------- 애니메이션 ---------- */
+    /* ---------- 애니메이션(한 번만 이동) ---------- */
     function startAnim(){ stopAnim(); rafId=requestAnimationFrame(tick); }
     function stopAnim(){ if (rafId){ cancelAnimationFrame(rafId); rafId=0; } }
 
     function tick(now){
-      const elapsed = (now - startTs) / 1000; // s
+      const elapsed = (now - startTs)/1000; // s
       const W = track.clientWidth;
+
+      let doneCount = 0;
 
       for (const L of letters){
         const t = elapsed - L.startTime;
         if (t <= 0){
-          // 출발 전: 시작 지점 대기(화면 밖)
+          // 출발 전 대기 위치
           L.el.style.left = (L.side==="L" ? -OUT_MARGIN : (W + OUT_MARGIN)) + "px";
           continue;
         }
         const d = L.speed * t;
         let x;
-        if (L.side === "L"){          // 왼쪽 → 오른쪽
+        if (L.side === "L"){ // 왼→오
           x = -OUT_MARGIN + d;
-          if (x > W + OUT_MARGIN){
-            // 반대쪽으로 사라졌으면 재스폰
-            respawnLetter(L, elapsed, W);
-            continue;
-          }
-        } else {                      // 오른쪽 → 왼쪽
+          if (x > W + OUT_MARGIN){ doneCount++; continue; }
+        } else {             // 오→왼
           x = W + OUT_MARGIN - d;
-          if (x < -OUT_MARGIN){
-            respawnLetter(L, elapsed, W);
-            continue;
-          }
+          if (x < -OUT_MARGIN){ doneCount++; continue; }
         }
         L.el.style.left = x + "px";
       }
 
-      rafId = requestAnimationFrame(tick);
-    }
+      if (doneCount >= letters.length){
+        // 모든 글자가 화면 밖으로 나가면 이번 라운드 애니메이션 종료(한 번만 이동)
+        animFinished = true;
+        stopAnim();
+        return;
+      }
 
-    function respawnLetter(L, elapsed, W){
-      // 새로운 방향/속도/지연으로 리스폰
-      L.side = Math.random() < 0.5 ? "L" : "R";
-      L.speed = rand(fastMin, fastMax);
-      L.startTime = elapsed + Math.random() * RESPAWN_JITTER;
-      // 위치는 다음 틱에서 다시 계산
+      rafId = requestAnimationFrame(tick);
     }
 
     /* ---------- 입력/판정 ---------- */
@@ -294,6 +307,7 @@
       if (e.key==="Enter"){ modal.classList.contains("open")?submitAnswer():openModal(); }
       else if (e.key==="Escape"){ modal.classList.contains("open")?closeModal():handleWrongOrGiveUp(); }
     });
+
     function openModal(){ modal.classList.add("open"); modal.setAttribute("aria-hidden","false"); input.value=""; input.focus(); }
     function closeModal(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden","true"); }
     function normalize(s){ return String(s).toLowerCase().replace(/\s+/g,"").trim(); }
@@ -308,9 +322,10 @@
         await log({isCorrect:true, points:pts});
         nextProblem(true);
       } else {
-        await handleWrongOrGiveUp();
+        await handleWrongOrGiveUp(); // 오답도 포기와 동일하게 10% 감속 후 재시작
       }
     }
+
     async function handleWrongOrGiveUp(){
       await log({isCorrect:false, points:0});
       attemptIdx++;
@@ -319,7 +334,7 @@
         await sleep(900);
         nextProblem(true);
       } else {
-        nextProblem(false); // 같은 문제, 전체 감속(위에서 처리)
+        nextProblem(false); // 같은 단어, 10% 감속하여 "다시 한 번" 이동
       }
     }
 
@@ -332,7 +347,6 @@
           attemptIndex: attemptIdx,
           isCorrect: !!isCorrect,
           points: Number(points||0),
-          // 개별 속도라 평균만 기록(대시보드 참고용)
           avgSpeed: Math.round(letters.reduce((s,l)=>s+l.speed,0)/Math.max(1,letters.length)),
           createdAt: serverTimestamp()
         });
