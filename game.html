@@ -25,8 +25,8 @@
     }
     .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.1); }
 
-    /* 글자들은 모두 여기(.word) 안에 개별 span으로 렌더링 */
-    .word { position:absolute; inset:0; pointer-events:none; }
+    /* 글자 컨테이너: 스팬의 left 기준이 되도록 relative */
+    .word { position:relative; height:100%; pointer-events:none; }
     .ch {
       position:absolute;
       top:50%;
@@ -93,7 +93,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // Firebase (사용자님 프로젝트)
+    // Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -107,7 +107,7 @@
     const db  = getFirestore(app);
     const auth = getAuth(app);
 
-    // URL 파라미터
+    // URL
     const p = new URLSearchParams(location.search);
     const classId = p.get("classId") || "";
     const setId   = p.get("set") || "";
@@ -129,11 +129,9 @@
 
     // 규칙
     const pointsSeq = [10,8,6,4,2];
-    const GAP = 4;              // 글자 간 간격(px)
-    const FONT_SIZE = 42;       // .ch와 동일
-    const FONT_WEIGHT = 800;
+    const GAP = 4;
 
-    // 설정/런타임 상태
+    // 설정/런타임
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
@@ -143,19 +141,10 @@
     let dir = "L2R"; let speed = 0; let totalScore = 0;
 
     // 애니메이션 상태
-    let rafId = 0, startTs = 0, headX = 0, trackW = 0;
+    let rafId = 0, startTs = 0, headX = 0;
     let chSpans = [], offsets = [], groupWidth = 0;
 
-    // Canvas 측정 준비
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    function refreshFont(){
-      const fam = getComputedStyle(document.body).fontFamily || "system-ui";
-      ctx.font = FONT_WEIGHT + " " + FONT_SIZE + "px " + fam;
-    }
-    refreshFont();
-
-    // 인증 후 config 구독
+    // 인증 → 설정 구독
     onAuthStateChanged(auth, async (u)=>{
       if (!u){
         setPill("authPill","익명 인증 중…");
@@ -178,11 +167,9 @@
       onSnapshot(doc(db,"configs",docId()), (snap)=>{
         if (!snap.exists()){ setPill("cfgPill","설정 없음"); stopAnim(); clearLetters(); running=false; msgEl.textContent="교사 설정 문서가 없습니다."; return; }
         const cfg = snap.data()||{};
-        // 🔒 단어를 안전하게 정제(빈 줄/공백 제거)
         words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
-        // 🔧 rounds는 단어 수를 넘지 않게 자동 보정 (넘으면 잘라냄)
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
-        rounds = Math.min(reqRounds, Math.max(1, words.length));
+        rounds = Math.min(reqRounds, Math.max(1, words.length)); // 단어 수 초과 방지
         const sp=cfg.speedBase||{};
         fastMin = Math.max(1, Number(sp.fastMin||420));
         fastMax = Math.max(fastMin, Number(sp.fastMax||520));
@@ -199,7 +186,6 @@
     function startSession(){
       totalScore=0; scoreEl.textContent="0";
       curIndex=-1; running=true;
-      // 단어 셔플 → rounds개만 사용 (기본 단어 섞지 않음)
       words = shuffle(words).slice(0, rounds);
       msgEl.textContent="게임 시작!";
       nextProblem(true);
@@ -212,63 +198,53 @@
         roundNowEl.textContent = String(curIndex+1);
         curWord = String(words[curIndex]||"");
         attemptIdx = 0;
-        speed = rand(fastMin, fastMax);     // 빠르게 시작
+        speed = rand(fastMin, fastMax);
       } else {
-        speed = Math.max(minFloor, speed*0.9); // 10% 감속
+        speed = Math.max(minFloor, speed*0.9);
       }
       dir = Math.random()<0.5 ? "L2R" : "R2L";
       speedNowEl.textContent = Math.round(speed);
 
-      buildLetters(curWord);                // ← 글자 단위 렌더링
-      trackW = track.clientWidth;
-      headX = (dir==="L2R") ? -groupWidth-12 : trackW+groupWidth+12;
-
+      buildLetters(curWord);           // ← 글자 단위 렌더
+      headX = (dir==="L2R") ? (-groupWidth - 12) : (track.clientWidth + groupWidth + 12);
       startAnim();
     }
 
-    // === 글자 단위 렌더링 ===
-function buildLetters(word){
-  // 1) 초기화
-  clearLetters();
+    /* ========= 글자 단위 렌더링(실제 폭 측정) ========= */
+    function buildLetters(word){
+      clearLetters();
 
-  // 2) 글자 span을 미리 숨긴 채로 DOM에 붙여 '실제 렌더 폭'을 측정
-  chSpans = [];
-  offsets = [];
+      // 1) 글자 span을 숨겨서 먼저 붙임(실제 렌더 폭 측정용)
+      for (let i=0; i<word.length; i++){
+        const ch = document.createElement("span");
+        ch.className = "ch";
+        ch.textContent = word[i];
+        ch.style.visibility = "hidden";
+        ch.style.left = "-99999px";
+        wordEl.appendChild(ch);
+        chSpans.push(ch);
+      }
 
-  for (let i = 0; i < word.length; i++) {
-    const ch = document.createElement("span");
-    ch.className = "ch";
-    ch.textContent = word[i];
+      // 2) 강제 리플로우 → 개별 폭 측정 → 누적 오프셋 계산
+      let x = 0;
+      offsets = [];
+      for (let i=0; i<chSpans.length; i++){
+        const w = Math.ceil(chSpans[i].getBoundingClientRect().width || 24);
+        offsets.push(x);
+        x += w + GAP;
+      }
+      groupWidth = Math.max(0, x - GAP);
 
-    // 보이지 않게 먼저 붙여 폭 측정 가능하게 함
-    ch.style.visibility = "hidden";
-    ch.style.left = "-99999px";
+      // 3) 시작 위치 세팅(방향별) + 보이도록 전환
+      const startFromLeft = (dir === "L2R");
+      const trackW = track.clientWidth;
+      const base = startFromLeft ? (-groupWidth - 12) : (trackW + groupWidth + 12);
 
-    wordEl.appendChild(ch);
-    chSpans.push(ch);
-  }
-
-  // 3) 강제 리플로우 후 폭 측정 → 누적 오프셋 계산
-  let x = 0;
-  for (let i = 0; i < chSpans.length; i++) {
-    const w = Math.ceil(chSpans[i].getBoundingClientRect().width || 24);
-    offsets.push(x);
-    x += w + 4;     // 글자 간격 4px (GAP)
-  }
-  groupWidth = Math.max(0, x - 4); // 마지막 간격 제거
-
-  // 4) 시작 위치 세팅(방향별) + 보이도록 전환
-  const startFromLeft = (dir === "L2R");
-  const trackWidth = track.clientWidth;
-
-  for (let i = 0; i < chSpans.length; i++) {
-    chSpans[i].style.visibility = "visible";
-    const base = startFromLeft ? (-groupWidth - 12) : (trackWidth + groupWidth + 12);
-    const xPos = startFromLeft ? (base + offsets[i]) : (base - offsets[i]);
-    chSpans[i].style.left = xPos + "px";
-  }
-}
-
+      for (let i=0; i<chSpans.length; i++){
+        chSpans[i].style.visibility = "visible";
+        chSpans[i].style.left = (startFromLeft ? (base + offsets[i]) : (base - offsets[i])) + "px";
+      }
+    }
     function clearLetters(){ wordEl.innerHTML=""; chSpans=[]; offsets=[]; groupWidth=0; }
 
     // 애니메이션
@@ -298,7 +274,6 @@ function buildLetters(word){
     });
     function openModal(){ modal.classList.add("open"); modal.setAttribute("aria-hidden","false"); input.value=""; input.focus(); }
     function closeModal(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden","true"); }
-
     function normalize(s){ return String(s).toLowerCase().replace(/\s+/g,"").trim(); }
     function rand(a,b){ return a + Math.random()*(b-a); }
     function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]];} return x; }
@@ -325,11 +300,10 @@ function buildLetters(word){
         await sleep(900);
         nextProblem(true);
       } else {
-        nextProblem(false); // 같은 문제, 감속
+        nextProblem(false);
       }
     }
 
-    // 저장
     async function log({isCorrect, points}){
       try{
         await addDoc(collection(db,"results"), {
