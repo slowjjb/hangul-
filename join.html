@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>철자 게임 입장</title>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
+  <style>
+    :root{font-family:'Gowun Dodum','Noto Sans KR',sans-serif;}
+    html,body{height:100%;margin:0;background:#0f172a;color:#fff;}
+    .wrap{max-width:520px;margin:0 auto;padding:24px;}
+    h1{font-size:24px;margin:18px 0 6px;}
+    .card{background:#0b1220;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;}
+    label{display:block;margin:10px 0 6px;font-weight:700;}
+    input,select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#fff;font-size:16px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .btn{width:100%;padding:12px 14px;border-radius:12px;border:0;cursor:pointer;font-weight:800}
+    .btn.primary{background:#2563eb;color:#fff}
+    .muted{color:#93a4b5;font-size:13px;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>철자 게임 입장</h1>
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="classId">반(classId)</label>
+          <input id="classId" placeholder="예) 6-1" />
+        </div>
+        <div>
+          <label for="sid">번호(sid)</label>
+          <input id="sid" placeholder="예) 01" />
+        </div>
+      </div>
+
+      <label for="name">이름</label>
+      <input id="name" placeholder="예) 민수" />
+
+      <label for="set">세트(set)</label>
+      <input id="set" placeholder="예) lesson1" />
+
+      <div style="height:12px"></div>
+      <button class="btn primary" id="goBtn">입장하기</button>
+      <div class="muted">
+        다음에 쉽게 들어오도록 입력값을 기기에 저장합니다.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // URL에 기본값이 오면 자동 채우기: ?classId=6-1&set=lesson1
+    const sp = new URLSearchParams(location.search);
+    const $ = id => document.getElementById(id);
+
+    const defaults = {
+      classId: sp.get('classId') || localStorage.getItem('classId') || '',
+      set:     sp.get('set')     || localStorage.getItem('set')     || '',
+      sid:     localStorage.getItem('sid') || '',
+      name:    localStorage.getItem('name') || ''
+    };
+    $('classId').value = defaults.classId;
+    $('set').value     = defaults.set;
+    $('sid').value     = defaults.sid;
+    $('name').value    = defaults.name;
+
+    $('goBtn').addEventListener('click', () => {
+      const classId = $('classId').value.trim();
+      const sid     = $('sid').value.trim();
+      const name    = $('name').value.trim();
+      const set     = $('set').value.trim();
+
+      if(!classId){ alert('반(classId)을 입력하세요. 예: 6-1'); return; }
+      if(!sid){ alert('번호(sid)를 입력하세요. 예: 01'); return; }
+      if(!name){ alert('이름을 입력하세요.'); return; }
+      if(!set){ alert('세트(set)를 입력하세요. 예: lesson1'); return; }
+
+      // 저장(다음 접속 때 자동 채움)
+      localStorage.setItem('classId', classId);
+      localStorage.setItem('sid', sid);
+      localStorage.setItem('name', name);
+      localStorage.setItem('set', set);
+
+      // game.html로 이동
+      const q = new URLSearchParams({ classId, sid, name, set });
+      location.href = `game.html?${q.toString()}`;
+    });
+
+    // Enter로 입장
+    ['classId','sid','name','set'].forEach(id=>{
+      $(id).addEventListener('keydown', e=>{
+        if(e.key==='Enter') $('goBtn').click();
+      });
+    });
+  </script>
+</body>
+</html>
