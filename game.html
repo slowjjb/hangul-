@@ -9,7 +9,7 @@
     body { margin:0; background:#0f172a; color:#fff; }
     header { background:#1d4ed8; padding:12px 16px; }
     header .meta { opacity:.9; font-size:13px; margin-top:4px; }
-    main { max-width:960px; margin:20px auto; padding:0 16px; }
+    main { max-width:1200px; margin:20px auto; padding:0 16px; }
 
     .hud { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .pill { background:#172554; border:1px solid #334155; padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px; }
@@ -18,22 +18,22 @@
     .btn.warn{ background:#991b1b; border-color:#ef4444; }
     .btn:disabled{ opacity:.6; cursor:not-allowed; }
 
-    .track { position:relative; height:120px; margin:24px 0; border-radius:14px;
+    /* 훨씬 넓은 트랙 */
+    .track { position:relative; height:240px; margin:24px 0; border-radius:14px;
       background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
       border:1px solid rgba(255,255,255,.08);
       overflow:hidden;
     }
     .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.1); }
 
-    /* 글자 컨테이너는 상대배치 → 내부 span.left 기준 고정 */
     .word { position:relative; height:100%; pointer-events:none; }
     .ch {
       position:absolute;
       top:50%;
       transform:translateY(-50%);
-      font-size:42px; font-weight:800; letter-spacing:.06em; white-space:pre;
+      font-size:48px; font-weight:800; letter-spacing:.06em; white-space:pre;
       text-shadow: 0 2px 6px rgba(0,0,0,.45);
-      will-change: left, transform;
+      will-change: left;
     }
 
     .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
@@ -126,23 +126,24 @@
     const modal = document.getElementById("modal");
     const input = document.getElementById("answerInput");
 
-    /* ---------- 게임 상수 (stagger 방식) ---------- */
+    /* ---------- 규칙/상수 ---------- */
     const pointsSeq = [10,8,6,4,2];
-    const LETTER_SPACING_PX = 36;  // 글자 간격(픽셀)
-    const EDGE_MARGIN_PX    = 40;  // 화면 밖 시작/종료 여유
+    const RESPAWN_JITTER = 0.6;     // 재출발 최대 지연(초) – 흐름 자연스럽게
+    const OUT_MARGIN = 400;         // 화면 밖 출발/종료 여유(px) → 아주 넓게 이동
 
-    /* ---------- 상태 ---------- */
+    /* ---------- 설정/런타임 ---------- */
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
 
     let user = null, running = false;
     let curIndex = -1, curWord = "", attemptIdx = 0;
-    let dir = "L2R"; let speed = 0; let totalScore = 0;
+    let totalScore = 0;
 
-    // 애니메이션 상태
-    let rafId = 0, startTs = 0;
-    let chSpans = [];
+    // 글자 오브젝트: {el, side:'L'|'R', speed, startTime}
+    let letters = [];
+    let rafId = 0;
+    let startTs = 0; // 문제 시작 시각
 
     /* ---------- 인증 → 설정 구독 ---------- */
     onAuthStateChanged(auth, async (u)=>{
@@ -171,9 +172,9 @@
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
         rounds = Math.min(reqRounds, Math.max(1, words.length)); // 단어 수 초과 방지
         const sp=cfg.speedBase||{};
-        fastMin = Math.max(1, Number(sp.fastMin||420));
+        fastMin = Math.max(140, Number(sp.fastMin||420));  // 너무 느리지 않게 바닥 상향
         fastMax = Math.max(fastMin, Number(sp.fastMax||520));
-        minFloor= Math.max(1, Number(sp.minFloor||140));
+        minFloor= Math.max(120, Number(sp.minFloor||140));
         roundTotalEl.textContent = String(rounds);
 
         setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
@@ -199,63 +200,90 @@
         roundNowEl.textContent = String(curIndex+1);
         curWord = String(words[curIndex]||"");
         attemptIdx = 0;
-        speed = rand(fastMin, fastMax);       // 빠르게 시작
       } else {
-        speed = Math.max(minFloor, speed*0.9); // 10% 감속
+        // 같은 문제 재시작: 모든 글자 속도 10% 감속(바닥 보장)
+        for (const L of letters){
+          L.speed = Math.max(minFloor, L.speed * 0.9);
+        }
       }
-      dir = Math.random()<0.5 ? "L2R" : "R2L";
-      speedNowEl.textContent = Math.round(speed);
+      speedNowEl.textContent = "~"; // 개별 속도이므로 평균 표시는 생략
 
-      buildLetters(curWord); // 글자 스팬 생성(측정 불필요)
-      startAnim();           // stagger 기반 애니메이션
+      buildLetters(curWord);
+      startAnim();
     }
 
-    /* ---------- 글자 렌더링 (폭 측정 없이) ---------- */
     function buildLetters(word){
       clearLetters();
-      chSpans = [];
-      for (let i=0; i<word.length; i++){
-        const ch = document.createElement("span");
-        ch.className = "ch";
-        ch.textContent = word[i];
-        ch.style.left = "-99999px"; // tick에서 위치 결정
-        wordEl.appendChild(ch);
-        chSpans.push(ch);
-      }
-    }
-    function clearLetters(){ wordEl.innerHTML=""; chSpans=[]; }
+      letters = [];
+      const W = track.clientWidth;
 
-    /* ---------- 애니메이션 (stagger 방식) ---------- */
-    function startAnim(){
-      stopAnim();
+      for (let i=0; i<word.length; i++){
+        const el = document.createElement("span");
+        el.className = "ch";
+        el.textContent = word[i];
+        el.style.left = "-99999px";
+        wordEl.appendChild(el);
+
+        // 각 글자별 랜덤 속도, 시작 방향, 출발 지연
+        const side = Math.random() < 0.5 ? "L" : "R";
+        const speed = rand(fastMin, fastMax);       // px/s
+        const startTime = Math.random() * 0.6;      // 0~0.6초 사이 랜덤 지연
+
+        letters.push({ el, side, speed, startTime });
+      }
+
+      // 평균 속도 표시(정보용)
+      const avg = Math.round(letters.reduce((s,l)=>s+l.speed,0)/letters.length);
+      speedNowEl.textContent = `~${avg} px/s`;
+
       startTs = performance.now();
-      rafId = requestAnimationFrame(tick);
     }
+
+    function clearLetters(){ wordEl.innerHTML=""; letters=[]; }
+
+    /* ---------- 애니메이션 ---------- */
+    function startAnim(){ stopAnim(); rafId=requestAnimationFrame(tick); }
     function stopAnim(){ if (rafId){ cancelAnimationFrame(rafId); rafId=0; } }
 
     function tick(now){
-      const elapsed = (now - startTs) / 1000;             // 전체 경과 시간(s)
-      const v = Math.max(1, speed);
-      const delay = LETTER_SPACING_PX / v;                 // 글자 간 출발 지연(s)
-
+      const elapsed = (now - startTs) / 1000; // s
       const W = track.clientWidth;
-      const baseL = -EDGE_MARGIN_PX;                       // L2R 시작 x
-      const baseR = W + EDGE_MARGIN_PX;                    // R2L 시작 x
 
-      for (let i = 0; i < chSpans.length; i++){
-        const t = elapsed - i * delay;                     // i번째 글자의 출발 후 경과
+      for (const L of letters){
+        const t = elapsed - L.startTime;
         if (t <= 0){
-          chSpans[i].style.left = (dir === "L2R" ? baseL : baseR) + "px";
+          // 출발 전: 시작 지점 대기(화면 밖)
+          L.el.style.left = (L.side==="L" ? -OUT_MARGIN : (W + OUT_MARGIN)) + "px";
           continue;
         }
-        const d = v * t;                                   // 이동 거리(px)
+        const d = L.speed * t;
         let x;
-        if (dir === "L2R") x = baseL + d;
-        else               x = baseR - d;
-        chSpans[i].style.left = x + "px";
+        if (L.side === "L"){          // 왼쪽 → 오른쪽
+          x = -OUT_MARGIN + d;
+          if (x > W + OUT_MARGIN){
+            // 반대쪽으로 사라졌으면 재스폰
+            respawnLetter(L, elapsed, W);
+            continue;
+          }
+        } else {                      // 오른쪽 → 왼쪽
+          x = W + OUT_MARGIN - d;
+          if (x < -OUT_MARGIN){
+            respawnLetter(L, elapsed, W);
+            continue;
+          }
+        }
+        L.el.style.left = x + "px";
       }
 
       rafId = requestAnimationFrame(tick);
+    }
+
+    function respawnLetter(L, elapsed, W){
+      // 새로운 방향/속도/지연으로 리스폰
+      L.side = Math.random() < 0.5 ? "L" : "R";
+      L.speed = rand(fastMin, fastMax);
+      L.startTime = elapsed + Math.random() * RESPAWN_JITTER;
+      // 위치는 다음 틱에서 다시 계산
     }
 
     /* ---------- 입력/판정 ---------- */
@@ -291,11 +319,11 @@
         await sleep(900);
         nextProblem(true);
       } else {
-        nextProblem(false); // 같은 문제 재시작(감속)
+        nextProblem(false); // 같은 문제, 전체 감속(위에서 처리)
       }
     }
 
-    /* ---------- 결과 저장 ---------- */
+    /* ---------- 결과 저장/세션 종료 ---------- */
     async function log({isCorrect, points}){
       try{
         await addDoc(collection(db,"results"), {
@@ -304,8 +332,8 @@
           attemptIndex: attemptIdx,
           isCorrect: !!isCorrect,
           points: Number(points||0),
-          speed: Math.round(speed),
-          direction: dir,
+          // 개별 속도라 평균만 기록(대시보드 참고용)
+          avgSpeed: Math.round(letters.reduce((s,l)=>s+l.speed,0)/Math.max(1,letters.length)),
           createdAt: serverTimestamp()
         });
       }catch(e){ console.error("save result error", e); }
