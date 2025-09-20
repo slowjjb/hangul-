@@ -18,36 +18,21 @@
     .btn.warn{ background:#991b1b; border-color:#ef4444; }
     .btn:disabled{ opacity:.6; cursor:not-allowed; }
 
-    .track {
-      position:relative;
-      height:420px;
-      margin:24px 0;
-      border-radius:14px;
-      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-      border:1px solid rgba(255,255,255,.08);
-      overflow:hidden;
-    }
+    .track { position:relative; height:420px; margin:24px 0; border-radius:14px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.08); overflow:hidden; }
     .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.08); }
-
     .word { position:relative; height:100%; pointer-events:none; }
-    .ch {
-      position:absolute;
-      transform:translateY(-50%);
-      font-size:56px; font-weight:800; letter-spacing:.06em; white-space:pre;
-      text-shadow: 0 2px 6px rgba(0,0,0,.45);
-      will-change: left, top;
-    }
+    .ch { position:absolute; transform:translateY(-50%); font-size:56px; font-weight:800; letter-spacing:.06em; white-space:pre; text-shadow:0 2px 6px rgba(0,0,0,.45); will-change:left, top; }
 
     .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
     .muted { color:#93a4b5; font-size:12px; }
 
-    .banner-wrap { position: fixed; inset:0; display:none; align-items:center; justify-content:center; background: rgba(0,0,0,.35); z-index: 50; }
+    .banner-wrap { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:50; }
     .banner-wrap.open { display:flex; }
-    .banner { min-width: 320px; max-width: 90vw; text-align:center; color:#fff; font-weight:900; font-size:24px; padding:18px 26px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.15); }
+    .banner { min-width:320px; max-width:90vw; text-align:center; color:#fff; font-weight:900; font-size:24px; padding:18px 26px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); }
     .banner.ok { background:#1e40af; }
     .banner.no { background:#991b1b; }
 
-    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index: 40;}
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:40; }
     .modal.open { display:flex; }
     .modal .box { width:min(520px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
     .row { display:flex; gap:8px; align-items:center; }
@@ -102,10 +87,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, doc, onSnapshot,
-      collection, addDoc, serverTimestamp, setDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     /* ---------- Firebase ---------- */
@@ -163,7 +145,6 @@
     let letters = [];
     let rafId = 0;
     let startTs = 0;
-    let animFinished = false;
 
     /* ========= 한글 자모 분해 + 조각 선택 ========= */
     function decomposeToJamo(str){
@@ -260,19 +241,13 @@
     function buildLetters(word){
       clearLetters();
       letters = [];
-      animFinished = false;
-
-      const W = track.clientWidth;
       const H = track.clientHeight;
 
-      // ★ 한글→자모, 영어→문자 단위로 조각 생성
+      // 한글→자모, 영어→문자
       const pieces = toPieces(word);
 
-      // ★ 조각이 비어 있으면 바로 다음 문제로 스킵 (고착 방지)
-      if (pieces.length === 0) {
-        nextProblem(true);
-        return;
-      }
+      // 조각이 없으면 바로 다음 문제(고착 방지)
+      if (pieces.length === 0) { nextProblem(true); return; }
 
       for (let i=0; i<pieces.length; i++){
         const el = document.createElement("span");
@@ -320,12 +295,8 @@
         L.el.style.left = x + "px";
       }
       if (doneCount >= letters.length){
-        animFinished = true;
+        // ★ 자동 진행 제거: 여기서는 그냥 멈추기만 함
         stopAnim();
-        // ★ 자동 다음 문제 진행 (모달 열려있지 않을 때)
-        if (running && !modal.classList.contains('open')) {
-          nextProblem(true); // 오답 처리로 넘기려면 handleWrongOrGiveUp(true)
-        }
         return;
       }
       rafId = requestAnimationFrame(tick);
@@ -335,7 +306,6 @@
     document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
     document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
     document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp());
-
     window.addEventListener("keydown", (e)=>{
       if (e.key==="Enter"){ modal.classList.contains("open")?submitAnswer():openModal(); }
       else if (e.key==="Escape"){ modal.classList.contains("open")?closeModal():handleWrongOrGiveUp(); }
@@ -367,25 +337,25 @@
         showBanner(true, "정답입니다!");
         await sleep(NEXT_DELAY_MS);
         hideBanner();
-        nextProblem(true);
+        nextProblem(true);           // 정답 → 다음 문제
       } else {
         await handleWrongOrGiveUp(true);
       }
     }
 
-    async function handleWrongOrGiveUp(cameFromWrong=false){
+    async function handleWrongOrGiveUp(){
       await log({isCorrect:false, points:0});
       attemptIdx++;
       if (attemptIdx >= pointsSeq.length){
         showBanner(false, `틀렸습니다. 정답: ${curWord}`);
         await sleep(NEXT_DELAY_MS);
         hideBanner();
-        nextProblem(true);
+        nextProblem(true);           // 시도 초과 → 다음 문제
       } else {
         showBanner(false, "틀렸습니다!");
         await sleep(NEXT_DELAY_MS);
         hideBanner();
-        nextProblem(false); // 같은 단어, 10% 감속하여 재시작
+        nextProblem(false);          // 오답 → 같은 문제 10% 느리게
       }
     }
 
@@ -421,6 +391,7 @@
     }
 
     /* ---------- 유틸 ---------- */
+    function setPill(id, t){ document.getElementById(id).textContent = t; }
     function rand(a,b){ return a + Math.random()*(b-a); }
     function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j]], [x[j],x[i]] } return x; }
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
