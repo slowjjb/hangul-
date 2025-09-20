@@ -106,9 +106,46 @@
 </script>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    /* ---------- Firebase 동적 import ---------- */
+try {
+  const [{ initializeApp }, firestoreMod, authMod] = await Promise.all([
+    import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'),
+    import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js'),
+  ]);
+
+  // 기존에 정적 import 하던 심볼을 여기서 꺼냄
+  const { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } = firestoreMod;
+  const { getAuth, onAuthStateChanged, signInAnonymously } = authMod;
+
+  /* ---------- Firebase ---------- */
+  const firebaseConfig = {
+    apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
+    authDomain: "grade-6-english-c17f3.firebaseapp.com",
+    projectId: "grade-6-english-c17f3",
+    storageBucket: "grade-6-english-c17f3.appspot.com",
+    messagingSenderId: "676305839050",
+    appId: "1:676305839050:web:a5399633e7b828883fe533"
+  };
+  const app  = initializeApp(firebaseConfig);
+  const db   = getFirestore(app);
+  const auth = getAuth(app);
+
+  // 진단 타이머에게 "정상 로드" 신호 보내기
+  window.firebaseReady = true;
+
+  // ⬇️⬇️⬇️ 여기부터는 네가 쓰던 기존 코드(인증/구독/게임 로직) 그대로 ⬇️⬇️⬇️
+
+} catch (e) {
+  console.error('Firebase 로드 실패', e);
+  document.getElementById('authPill').textContent = '로딩 실패';
+  document.getElementById('cfgPill').textContent  = '네트워크/차단 확인';
+  document.getElementById('message').textContent =
+    'Firebase 모듈을 로드하지 못했습니다. 시크릿 창/다른 네트워크/광고차단 해제 후 다시 시도하세요.';
+  // 여기서 return; 해도 됨
+}
+
 
     /* ---------- Firebase ---------- */
     const firebaseConfig = {
