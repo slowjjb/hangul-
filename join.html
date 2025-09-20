@@ -5,18 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>철자 게임 입장</title>
   <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif; color-scheme: dark; }
-    body { margin:0; background:#0f172a; color:#e5e7eb; display:grid; place-items:center; min-height:100vh; }
-    .card { width:min(560px, 94vw); background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:18px; }
-    h1 { margin:0 0 14px; font-size:22px; }
-    label{ font-size:13px; color:#93a4b5; }
-    select, input{
-      width:100%; padding:10px 12px; border:1px solid #334155; border-radius:10px;
-      background:#0f172a; color:#fff; font-size:15px;
-    }
-    .row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .btn{ width:100%; border:1px solid #2563eb; background:#2563eb; color:#fff; padding:12px; border-radius:10px; font-weight:800; cursor:pointer; }
-    .muted{ color:#9aa9b8; font-size:12px; margin-top:8px; }
+    :root{ font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR","Malgun Gothic",sans-serif; color-scheme: dark; }
+    body{ margin:0; background:#0b1220; color:#e5e7eb; min-height:100vh; display:grid; place-items:center; }
+    .card{ width:min(720px,92vw); background:#0f172a; border:1px solid #334155; border-radius:16px; padding:20px; }
+    h1{ margin:0 0 16px; font-size:24px; }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    label{ display:block; margin:14px 0 6px; color:#a8b3c6; font-size:14px; }
+    select,input{ width:100%; padding:10px 12px; border:1px solid #334155; background:#0b1220; color:#e5e7eb; border-radius:10px; }
+    .btn{ margin-top:16px; width:100%; padding:12px 14px; border:none; background:#2563eb; color:white; font-weight:700; border-radius:12px; cursor:pointer; }
+    .muted{ margin-top:8px; color:#93a4b5; font-size:12px; }
   </style>
 </head>
 <body>
@@ -26,51 +23,51 @@
     <div class="row">
       <div>
         <label>학년</label>
-        <select id="grade">
+        <select id="gradeSel">
           <option value="6">6학년</option>
           <option value="5">5학년</option>
           <option value="4">4학년</option>
+          <option value="3">3학년</option>
+          <option value="2">2학년</option>
+          <option value="1">1학년</option>
         </select>
       </div>
       <div>
         <label>반</label>
-        <select id="ban">
+        <select id="classSel">
           <option value="1">1반</option><option value="2">2반</option>
-          <option value="3">3반</option><option value="4">4반</option>
+          <option value="3" selected>3반</option><option value="4">4반</option>
           <option value="5">5반</option><option value="6">6반</option>
           <option value="7">7반</option><option value="8">8반</option>
         </select>
       </div>
     </div>
 
-    <div style="margin-top:10px;">
-      <label>공개 세트(set)</label>
-      <select id="publicSet">
-        <option value="">세트 목록 불러오는 중…</option>
-      </select>
-    </div>
+    <label style="margin-top:16px;">공개 세트(set)</label>
+    <select id="publicSet">
+      <option value="">(불러오는 중…)</option>
+    </select>
 
-    <div class="row" style="margin-top:10px;">
+    <div class="row">
       <div>
         <label>번호(sid)</label>
-        <input id="sid" placeholder="예) 01" />
+        <input id="sid" type="text" value="51"/>
       </div>
       <div>
         <label>이름</label>
-        <input id="name" placeholder="예) 민수" />
+        <input id="name" type="text" value="김민서"/>
       </div>
     </div>
 
-    <button id="enter" class="btn" style="margin-top:14px;">입장하기</button>
-    <div id="msg" class="muted">입력값은 기기에 저장되어 다음 접속 시 자동 채웁니다.</div>
+    <button id="enter" class="btn">입장하기</button>
+    <div id="msg" class="muted"></div>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Firebase
+    // 🔧 프로젝트 설정
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -80,72 +77,89 @@
       appId: "1:676305839050:web:a5399633e7b828883fe533"
     };
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db   = getFirestore(app);
+    const db  = getFirestore(app);
 
-    const el = {
-      grade: document.getElementById('grade'),
-      ban: document.getElementById('ban'),
-      publicSet: document.getElementById('publicSet'),
-      sid: document.getElementById('sid'),
-      name: document.getElementById('name'),
-      msg: document.getElementById('msg')
-    };
+    const $ = (id)=> document.getElementById(id);
+    const gradeSel = $("gradeSel");
+    const classSel = $("classSel");
+    const publicSet = $("publicSet");
+    const sidEl = $("sid");
+    const nameEl = $("name");
+    const msgEl = $("msg");
 
-    // 저장된 값 채우기
-    function loadLocal(){
-      el.grade.value = localStorage.getItem('join.grade') || '6';
-      el.ban.value   = localStorage.getItem('join.ban')   || '1';
-      el.sid.value   = localStorage.getItem('join.sid')   || '';
-      el.name.value  = localStorage.getItem('join.name')  || '';
-    }
-    function saveLocal(){
-      localStorage.setItem('join.grade', el.grade.value);
-      localStorage.setItem('join.ban', el.ban.value);
-      localStorage.setItem('join.sid', el.sid.value.trim());
-      localStorage.setItem('join.name', el.name.value.trim());
-    }
-    loadLocal();
-
-    // 인증 → 공개 세트 목록 로드
-    onAuthStateChanged(auth, async (u)=>{
-      if (!u) { try{ await signInAnonymously(auth);}catch(e){ console.error(e);} return; }
-      await loadPublicSets();
-    });
-
-    async function loadPublicSets(){
-      el.publicSet.innerHTML = `<option value="">세트 목록 불러오는 중…</option>`;
+    // 🔄 공개 세트 불러오기
+    (async function loadPublicSets(){
+      publicSet.innerHTML = `<option value="">(불러오는 중…)</option>`;
       try{
-        const qs = await getDocs(query(collection(db,'configs'), where('public','==', true)));
-        const opts = [];
-        qs.forEach(d=>{
-          const data = d.data() || {};
-          const label = data.set || d.id;
-          opts.push({ id:d.id, label });
+        const q = query(collection(db, "configs"), where("public", "==", true));
+        const snap = await getDocs(q);
+
+        const items = [];
+        snap.forEach(d=>{
+          const x = d.data();
+          const classId = String(x.classId||"").trim(); // 예: "6-3"
+          const set     = String(x.set||"").trim();     // 예: "한글"
+          if(!classId || !set) return;
+
+          // value는 "classId_set" (예: "6-3_한글") — 표시 라벨은 set
+          items.push({ value: `${classId}_${set}`, label: set, classId });
         });
-        el.publicSet.innerHTML = opts.length
-          ? opts.map(o=>`<option value="${o.id}">${o.label}</option>`).join('')
+
+        items.sort((a,b)=> a.label.localeCompare(b.label, "ko"));
+        publicSet.innerHTML = items.length
+          ? `<option value="">(세트 선택)</option>` + items.map(o=>`<option value="${o.value}">${o.label}</option>`).join("")
           : `<option value="">(공개 세트 없음)</option>`;
-        el.msg.textContent = `공개 세트 ${opts.length}개 불러옴`;
+
+        msgEl.textContent = `공개 세트 ${items.length}개 불러옴`;
+
+        // 세트 선택 시 학년/반 동기화
+        publicSet.addEventListener("change", ()=>{
+          const v = publicSet.value;
+          if(!v || !v.includes("_")) return;
+          const i = v.indexOf("_");
+          const classId = v.slice(0, i);      // "6-3"
+          const [g, c] = classId.split("-");
+          if(g) gradeSel.value = g;
+          if(c) classSel.value = c;
+        });
       }catch(e){
         console.error(e);
-        el.publicSet.innerHTML = `<option value="">(불러오기 오류)</option>`;
-        el.msg.textContent = '세트 목록 불러오기 실패';
+        publicSet.innerHTML = `<option value="">(불러오기 실패)</option>`;
+        msgEl.textContent = "공개 세트 불러오기에 실패했습니다.";
       }
-    }
+    })();
 
-    document.getElementById('enter').addEventListener('click', ()=>{
-      const cfgId = el.publicSet.value;
-      const classId = `${el.grade.value}-${el.ban.value}`;
-      const sid = el.sid.value.trim();
-      const name = el.name.value.trim();
+    // 🚪 입장하기
+    $("enter").addEventListener("click", ()=>{
+      const sid  = sidEl.value.trim();
+      const name = nameEl.value.trim();
 
-      if (!cfgId) { el.msg.textContent = '세트를 선택하세요.'; return; }
-      if (!sid || !name){ el.msg.textContent = '번호/이름을 입력하세요.'; return; }
+      // publicSet의 value 예: "6-3_한글" → 첫 번째 '_' 기준으로 분리 (세트명이 '_'를 포함해도 안전)
+      let classId = `${gradeSel.value}-${classSel.value}`;
+      let set = "";
+      const v = publicSet.value.trim();
 
-      saveLocal();
-      const url = `game.html?cfg=${encodeURIComponent(cfgId)}&classId=${encodeURIComponent(classId)}&sid=${encodeURIComponent(sid)}&name=${encodeURIComponent(name)}`;
-      location.href = url;
+      if(v){
+        const idx = v.indexOf("_");
+        if(idx > 0){
+          classId = v.slice(0, idx);
+          set     = v.slice(idx + 1);
+        }
+      }
+      if(!set){
+        // 공개 세트 선택이 없을 때는 사용자가 고른 학년/반 조합과 수동 set 입력이 필요하지만
+        // 현재 UI는 공개 세트 기준으로 운영하므로 안내만 합니다.
+        alert("공개 세트를 선택해 주세요.");
+        return;
+      }
+
+      const params = new URLSearchParams({
+        classId,
+        set,
+        sid,
+        name
+      });
+      location.href = `game.html?${params.toString()}`;
     });
   </script>
 </body>
