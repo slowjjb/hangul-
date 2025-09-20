@@ -85,6 +85,26 @@
     </div>
   </div>
 
+  <script>
+  (function () {
+    // URL 파라미터를 모듈 밖에서 먼저 반영 (모듈이 막혀도 헤더는 바뀜)
+    const p = new URLSearchParams(location.search);
+    const headerMeta = document.getElementById('headerMeta');
+    headerMeta.textContent =
+      `classId=${p.get('classId')||'(없음)'} · set=${p.get('set')||'(없음)'} · sid=${p.get('sid')||'(없음)'} · ${new Date().toLocaleString('ko-KR')}`;
+
+    // 2.5초 안에 Firebase 초기화 신호가 없으면 사용자에게 안내
+    setTimeout(() => {
+      if (!window.firebaseReady) {
+        document.getElementById('authPill').textContent = '로딩 실패';
+        document.getElementById('cfgPill').textContent = '네트워크/차단 확인';
+        document.getElementById('message').textContent =
+          'Firebase 로드에 실패했습니다. Ctrl+F5 또는 시크릿 창으로 열어보거나, 광고차단/보안 확장프로그램을 잠시 꺼주세요.';
+      }
+    }, 2500);
+  })();
+</script>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
