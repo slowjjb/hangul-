@@ -8,7 +8,10 @@
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif; color-scheme: dark; }
     body { margin:0; background:#0f172a; color:#e5e7eb; }
     header { background:#1d4ed8; padding:12px 16px; }
-    main { max-width:1100px; margin:22px auto; padding:0 16px; }
+    main { max-width:1200px; margin:22px auto; padding:0 16px; }
+    .tabs { display:flex; gap:8px; margin:16px 0; }
+    .tab { padding:8px 14px; border-radius:10px; border:1px solid #334155; background:#0b1220; cursor:pointer; font-weight:700; }
+    .tab.active { background:#2563eb; border-color:#2563eb; }
     .card { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:16px; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .col { display:flex; flex-direction:column; gap:8px; }
@@ -24,7 +27,13 @@
     .btn:disabled{ opacity:.6; cursor:not-allowed; }
     .muted { color:#9aa9b8; font-size:12px; }
     .grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; }
-    @media (max-width:860px){ .grid{ grid-template-columns:1fr 1fr; } }
+    @media (max-width:960px){ .grid{ grid-template-columns:1fr 1fr; } }
+
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:10px; border-bottom:1px solid rgba(148,163,184,.2); text-align:left; white-space:nowrap; }
+    th { background:#0f172a; position:sticky; top:0; }
+    .scroller { overflow:auto; max-height:520px; border:1px solid rgba(148,163,184,.2); border-radius:10px; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#172554; border:1px solid #334155; font-size:12px; }
   </style>
 </head>
 <body>
@@ -34,8 +43,14 @@
   </header>
 
   <main>
-    <!-- 세트 선택/목록 관리 -->
-    <div class="card" style="margin-bottom:16px;">
+    <div class="tabs">
+      <button class="tab active" data-tab="settings">설정</button>
+      <button class="tab" data-tab="live">실시간 결과</button>
+      <button class="tab" data-tab="agg">합산 결과</button>
+    </div>
+
+    <!-- ========== 설정 탭 ========== -->
+    <section id="tab-settings" class="card">
       <div class="row">
         <div class="col" style="min-width:220px;flex:1;">
           <label>classId</label>
@@ -47,13 +62,11 @@
         </div>
 
         <div class="col" style="min-width:260px;flex:1;">
-          <label>세트 목록</label>
-          <select id="setList">
-            <option value="">(classId 입력 후 새로고침)</option>
-          </select>
+          <label>세트 목록 (해당 classId의 configs)</label>
+          <select id="setList"><option value="">(classId 입력 후 새로고침)</option></select>
         </div>
 
-        <div class="col" style="min-width:260px;">
+        <div class="col" style="min-width:280px;">
           <label>&nbsp;</label>
           <div class="row">
             <button class="btn" id="btnRefresh">목록 새로고침</button>
@@ -65,11 +78,8 @@
 
       <div class="muted" id="roleInfo" style="margin-top:6px;">권한: 익명(학생) · 삭제/세션 제어 비활성화</div>
       <div class="muted">로그인: <a href="teacher-login.html" style="color:#93c5fd;">teacher-login.html</a></div>
-    </div>
 
-    <!-- 세트 상세 관리 -->
-    <div class="card">
-      <div class="row">
+      <div class="row" style="margin-top:16px;">
         <div class="col" style="flex:1 1 320px;">
           <label>단어 목록 (줄바꿈/띄어쓰기 구분)</label>
           <textarea id="wordsBox" placeholder="예) apple↵banana↵cherry"></textarea>
@@ -77,25 +87,12 @@
       </div>
 
       <div class="grid" style="margin-top:12px;">
-        <div class="col">
-          <label>라운드 수</label>
-          <input id="rounds" type="number" value="5" />
-        </div>
-        <div class="col">
-          <label>속도 하한 (fastMin, px/s)</label>
-          <input id="fastMin" type="number" value="420" />
-        </div>
-        <div class="col">
-          <label>속도 상한 (fastMax, px/s)</label>
-          <input id="fastMax" type="number" value="520" />
-        </div>
-        <div class="col">
-          <label>최저 속도 바닥값 (minFloor, px/s)</label>
-          <input id="minFloor" type="number" value="140" />
-        </div>
+        <div class="col"><label>라운드 수</label><input id="rounds" type="number" value="5" /></div>
+        <div class="col"><label>속도 하한 (fastMin, px/s)</label><input id="fastMin" type="number" value="420" /></div>
+        <div class="col"><label>속도 상한 (fastMax, px/s)</label><input id="fastMax" type="number" value="520" /></div>
+        <div class="col"><label>최저 속도 바닥값 (minFloor, px/s)</label><input id="minFloor" type="number" value="140" /></div>
       </div>
 
-      <!-- ✅ 공개 세트 여부 체크박스 -->
       <div class="col" style="margin-top:10px;">
         <label><input type="checkbox" id="isPublic" /> 공개 세트 (누구나 선택 가능)</label>
       </div>
@@ -109,18 +106,57 @@
 
       <div class="muted" style="margin-top:10px;">문서는 <code>configs/{classId}_{set}</code> 에 저장/삭제됩니다.</div>
       <div id="toast" class="muted" style="margin-top:6px;"></div>
-    </div>
+    </section>
+
+    <!-- ========== 실시간 결과 탭 ========== -->
+    <section id="tab-live" class="card" style="display:none;">
+      <div class="row">
+        <span class="pill" id="liveStatus">구독 대기</span>
+        <span class="muted">필터는 “설정” 탭의 classId / set 값을 사용합니다.</span>
+        <button class="btn" id="btnLiveRefresh">다시 구독</button>
+      </div>
+      <div class="scroller" style="margin-top:10px;">
+        <table id="liveTable">
+          <thead>
+            <tr>
+              <th>시간</th><th>반</th><th>번호</th><th>이름</th>
+              <th>세트</th><th>단어</th><th>정답</th><th>점수</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ========== 합산 결과 탭 ========== -->
+    <section id="tab-agg" class="card" style="display:none;">
+      <div class="row">
+        <span class="pill" id="aggStatus">집계 대기</span>
+        <span class="muted">필터는 “설정” 탭의 classId / set 값을 사용합니다.</span>
+        <button class="btn" id="btnAggRefresh">다시 집계</button>
+      </div>
+      <div class="scroller" style="margin-top:10px;">
+        <table id="aggTable">
+          <thead>
+            <tr>
+              <th>반</th><th>번호</th><th>이름</th><th>총점</th><th>정답수</th><th>제출수</th><th>마지막 제출</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script type="module">
+    /* ================= Firebase ================= */
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
       getFirestore, doc, getDoc, setDoc, deleteDoc,
-      collection, query, where, getDocs, serverTimestamp
+      collection, query, where, onSnapshot, getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // ✅ 교사 UID
     const TEACHER_UIDS = ["5lgNILjYd9eOICKua6vbm1hcRny2"];
 
     const firebaseConfig = {
@@ -135,59 +171,77 @@
     const db  = getFirestore(app);
     const auth = getAuth(app);
 
-    const els = {
-      meta: document.getElementById('meta'),
-      roleInfo: document.getElementById('roleInfo'),
-      classId: document.getElementById('classId'),
-      setId: document.getElementById('setId'),
-      setList: document.getElementById('setList'),
-      wordsBox: document.getElementById('wordsBox'),
-      rounds: document.getElementById('rounds'),
-      fastMin: document.getElementById('fastMin'),
-      fastMax: document.getElementById('fastMax'),
-      minFloor: document.getElementById('minFloor'),
-      isPublic: document.getElementById('isPublic'),
-      btnRefresh: document.getElementById('btnRefresh'),
-      btnLoad: document.getElementById('btnLoad'),
-      btnDelete: document.getElementById('btnDelete'),
-      btnLoadByIds: document.getElementById('btnLoadByIds'),
-      btnSave: document.getElementById('btnSave'),
-      btnStart: document.getElementById('btnStart'),
-      btnStop: document.getElementById('btnStop'),
-      toast: document.getElementById('toast'),
+    /* ============== DOM refs ============== */
+    const $ = (id)=>document.getElementById(id);
+    const meta = $("meta"), toastEl = $("toast");
+    const tabBtns = Array.from(document.querySelectorAll(".tab"));
+    const tabSections = {
+      settings: $("tab-settings"),
+      live: $("tab-live"),
+      agg: $("tab-agg"),
     };
 
-    const docId = (c,s)=> `${c}_${s}`;
-    const toast = (t)=> els.toast.textContent = t;
+    // settings
+    const els = {
+      roleInfo: $("roleInfo"),
+      classId: $("classId"),
+      setId: $("setId"),
+      setList: $("setList"),
+      wordsBox: $("wordsBox"),
+      rounds: $("rounds"),
+      fastMin: $("fastMin"),
+      fastMax: $("fastMax"),
+      minFloor: $("minFloor"),
+      isPublic: $("isPublic"),
+      btnRefresh: $("btnRefresh"),
+      btnLoad: $("btnLoad"),
+      btnDelete: $("btnDelete"),
+      btnLoadByIds: $("btnLoadByIds"),
+      btnSave: $("btnSave"),
+      btnStart: $("btnStart"),
+      btnStop: $("btnStop"),
+    };
 
-    function saveLocal(){
-      localStorage.setItem('teacher.classId', els.classId.value.trim());
-      localStorage.setItem('teacher.setId', els.setId.value.trim());
-    }
-    function loadLocal(){
-      els.classId.value = localStorage.getItem('teacher.classId') || '6-1';
-      els.setId.value   = localStorage.getItem('teacher.setId') || 'lesson1';
-    }
+    // live
+    const liveStatus = $("liveStatus");
+    const liveTableBody = $("liveTable").querySelector("tbody");
+    $("btnLiveRefresh").addEventListener("click", subscribeLive);
+
+    // agg
+    const aggStatus = $("aggStatus");
+    const aggTableBody = $("aggTable").querySelector("tbody");
+    $("btnAggRefresh").addEventListener("click", buildAgg);
+
+    const docId = (c,s)=> `${c}_${s}`;
+    const toast = (t)=> toastEl.textContent = t;
+    function saveLocal(){ localStorage.setItem('teacher.classId', els.classId.value.trim()); localStorage.setItem('teacher.setId', els.setId.value.trim()); }
+    function loadLocal(){ els.classId.value = localStorage.getItem('teacher.classId') || '6-1'; els.setId.value = localStorage.getItem('teacher.setId') || 'lesson1'; }
     loadLocal();
 
     let isTeacher = false;
-
     onAuthStateChanged(auth, async (u)=>{
-      if (!u) {
-        try { await signInAnonymously(auth); } catch(e){ console.error(e); }
-        return;
-      }
+      if (!u) { try { await signInAnonymously(auth); } catch(e){} return; }
       isTeacher = TEACHER_UIDS.includes(u.uid);
-      els.meta.textContent = `인증됨: uid=${u.uid}${u.email? ' · '+u.email:''} · ${new Date().toLocaleString('ko-KR')}`;
+      meta.textContent = `인증됨: uid=${u.uid}${u.email? ' · '+u.email:''} · ${new Date().toLocaleString('ko-KR')}`;
       els.roleInfo.textContent = isTeacher ? '권한: 교사 · 삭제/세션 제어 가능' : '권한: 익명/학생 · 삭제/세션 제어 불가';
-
-      els.btnDelete.disabled = !isTeacher;
-      els.btnStart.disabled = !isTeacher;
-      els.btnStop.disabled  = !isTeacher;
-
+      els.btnDelete.disabled = !isTeacher; els.btnStart.disabled=!isTeacher; els.btnStop.disabled=!isTeacher;
       refreshList();
+      // 실시간/합산도 최초 1회 실행
+      subscribeLive();
+      buildAgg();
     });
 
+    /* ============== 탭 전환 ============== */
+    tabBtns.forEach(b=>{
+      b.addEventListener("click",()=>{
+        tabBtns.forEach(x=>x.classList.remove("active"));
+        b.classList.add("active");
+        const k=b.dataset.tab;
+        Object.entries(tabSections).forEach(([key,sec])=>sec.style.display = (key===k?'block':'none'));
+      });
+    });
+
+    /* ============== 세트 목록 ============== */
     async function refreshList(){
       const c = els.classId.value.trim();
       if (!c){ toast('classId를 먼저 입력하세요.'); return; }
@@ -203,88 +257,57 @@
         els.setList.innerHTML = options.length ? options.join('') : `<option value="">(세트 없음)</option>`;
         toast(`세트 ${options.length}개`);
       } catch(e){
-        console.error(e);
-        toast('목록 불러오기 실패');
-        els.setList.innerHTML = `<option value="">(오류)</option>`;
+        toast('목록 불러오기 실패'); els.setList.innerHTML = `<option value="">(오류)</option>`;
       }
     }
-
-    async function loadConfig(c, s){
+    async function loadConfig(c,s){
       if (!c || !s){ toast('classId, set을 입력하세요.'); return; }
       try{
         const snap = await getDoc(doc(db,'configs', docId(c,s)));
         if (!snap.exists()){ toast('문서가 없습니다.'); return; }
-        const cfg = snap.data() || {};
-        els.classId.value = cfg.classId || c;
-        els.setId.value = cfg.set || s;
+        const cfg = snap.data()||{};
+        els.classId.value = cfg.classId || c; els.setId.value = cfg.set || s;
         els.wordsBox.value = (Array.isArray(cfg.words)?cfg.words:[]).join('\n');
         els.rounds.value = cfg.rounds ?? 5;
         els.fastMin.value = cfg.speedBase?.fastMin ?? 420;
         els.fastMax.value = cfg.speedBase?.fastMax ?? 520;
         els.minFloor.value = cfg.speedBase?.minFloor ?? 140;
-        els.isPublic.checked = !!cfg.public; // ✅ 공개 여부 반영
+        els.isPublic.checked = !!cfg.public;
         toast(`불러옴: ${docId(c,s)} (active=${cfg.active? 'true':'false'})`);
-        saveLocal();
-      }catch(e){
-        console.error(e);
-        toast('불러오기 실패');
-      }
+        saveLocal(); // 새 필터로 live/agg 갱신
+        subscribeLive(true);
+        buildAgg();
+      }catch(e){ toast('불러오기 실패'); }
     }
-
     async function saveConfig(activeFlag=null){
-      const c = els.classId.value.trim();
-      const s = els.setId.value.trim();
-      if (!c || !s){ toast('classId, set을 입력하세요.'); return; }
-
-      const words = els.wordsBox.value
-        .split(/\r?\n|,|\s+/)
-        .map(v => v.trim())
-        .filter(Boolean);
-
-      const cfg = {
-        classId: c,
-        set: s,
-        public: els.isPublic.checked,  // ✅ 저장
-        words,
-        rounds: Math.max(1, Number(els.rounds.value||1)),
-        speedBase: {
-          fastMin: Number(els.fastMin.value||420),
-          fastMax: Number(els.fastMax.value||520),
-          minFloor: Number(els.minFloor.value||140)
+      const c=els.classId.value.trim(), s=els.setId.value.trim();
+      if(!c||!s){ toast('classId, set을 입력하세요.'); return; }
+      const words=els.wordsBox.value.split(/\r?\n|,|\s+/).map(v=>v.trim()).filter(Boolean);
+      const cfg={
+        classId:c, set:s, public:els.isPublic.checked, words,
+        rounds:Math.max(1, Number(els.rounds.value||1)),
+        speedBase:{
+          fastMin:Number(els.fastMin.value||420),
+          fastMax:Number(els.fastMax.value||520),
+          minFloor:Number(els.minFloor.value||140)
         },
         updatedAt: serverTimestamp()
       };
-      if (activeFlag!==null) {
-        if (!isTeacher) { toast('세션 시작/중지는 교사만 가능합니다.'); return; }
-        cfg.active = !!activeFlag;
-      }
-
+      if(activeFlag!==null){ if(!isTeacher){ toast('세션 시작/중지는 교사만 가능합니다.'); return; } cfg.active=!!activeFlag; }
       try{
-        await setDoc(doc(db,'configs', docId(c,s)), cfg, { merge:true });
-        toast(`저장 완료: ${docId(c,s)}${activeFlag!==null? ` (active=${cfg.active})` : ''}`);
-        saveLocal();
-        refreshList();
-      }catch(e){
-        console.error(e);
-        toast('저장 실패: ' + (e?.message || e));
-      }
+        await setDoc(doc(db,'configs',docId(c,s)), cfg, {merge:true});
+        toast(`저장 완료: ${docId(c,s)}${activeFlag!==null?` (active=${cfg.active})`:''}`);
+        saveLocal(); refreshList(); subscribeLive(true); buildAgg();
+      }catch(e){ toast('저장 실패: ' + (e?.message||e)); }
     }
-
     async function deleteConfig(){
-      if (!isTeacher){ toast('삭제는 교사만 가능합니다.'); return; }
-      const c = els.classId.value.trim();
-      const s = (els.setList.value || els.setId.value.trim());
-      if (!c || !s){ toast('삭제할 classId/set을 선택하세요.'); return; }
-      const id = docId(c,s);
-      if (!confirm(`정말 삭제할까요?\nconfigs/${id}`)) return;
-      try{
-        await deleteDoc(doc(db,'configs', id));
-        toast(`삭제 완료: ${id}`);
-        refreshList();
-      }catch(e){
-        console.error(e);
-        toast('삭제 실패: ' + (e?.message || e));
-      }
+      if(!isTeacher){ toast('삭제는 교사만 가능합니다.'); return; }
+      const c=els.classId.value.trim(); const s=(els.setList.value||els.setId.value.trim());
+      if(!c||!s){ toast('삭제할 classId/set을 선택하세요.'); return; }
+      const id=docId(c,s);
+      if(!confirm(`정말 삭제할까요?\nconfigs/${id}`)) return;
+      try{ await deleteDoc(doc(db,'configs',id)); toast(`삭제 완료: ${id}`); refreshList(); }
+      catch(e){ toast('삭제 실패: ' + (e?.message||e)); }
     }
 
     els.btnRefresh.addEventListener('click', refreshList);
@@ -294,7 +317,91 @@
     els.btnStart.addEventListener('click', ()=> saveConfig(true));
     els.btnStop.addEventListener('click', ()=> saveConfig(false));
     els.btnDelete.addEventListener('click', deleteConfig);
-    els.classId.addEventListener('keydown', (e)=>{ if(e.key==='Enter') refreshList(); });
+    els.classId.addEventListener('keydown', e=>{ if(e.key==='Enter') refreshList(); });
+
+    /* ============== 실시간 결과 ============== */
+    let liveUnsub = null;
+    function subscribeLive(restart=false){
+      if(liveUnsub){ liveUnsub(); liveUnsub=null; }
+      const c=els.classId.value.trim(), s=els.setId.value.trim();
+      if(!c||!s){ liveStatus.textContent='필터(classId,set) 필요'; return; }
+      liveStatus.textContent='구독 중…';
+      const qRef=query(collection(db,'results'), where('classId','==',c), where('set','==',s));
+      liveUnsub=onSnapshot(qRef, snap=>{
+        const rows=[];
+        snap.forEach(d=>{
+          const r=d.data()||{};
+          rows.push(r);
+        });
+        // 최신순 표시는 클라이언트 정렬 (인덱스 불필요)
+        rows.sort((a,b)=> (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+        renderLive(rows);
+        liveStatus.textContent=`구독 중 (${rows.length}건)`;
+      }, err=>{
+        console.error(err);
+        liveStatus.textContent='구독 오류';
+      });
+    }
+    function renderLive(rows){
+      liveTableBody.innerHTML = rows.map(r=>{
+        const t = r.createdAt?.toDate?.() ? r.createdAt.toDate() : (r.createdAt? new Date(r.createdAt): null);
+        const time = t ? t.toLocaleString('ko-KR') : '-';
+        return `<tr>
+          <td>${time}</td>
+          <td>${r.classId||''}</td>
+          <td>${r.sid||''}</td>
+          <td>${r.name||''}</td>
+          <td>${r.set||''}</td>
+          <td>${r.word||''}</td>
+          <td>${r.isCorrect? 'O':'-'}</td>
+          <td>${r.points??0}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    /* ============== 합산 결과 ============== */
+    async function buildAgg(){
+      const c=els.classId.value.trim(), s=els.setId.value.trim();
+      if(!c||!s){ aggStatus.textContent='필터(classId,set) 필요'; return; }
+      aggStatus.textContent='집계 중…';
+      try{
+        const qSnap = await getDocs(query(collection(db,'results'), where('classId','==',c), where('set','==',s)));
+        const map = new Map(); // key = sid, val = {sid,name,classId,set,total,correct,count,lastAt}
+        qSnap.forEach(d=>{
+          const r=d.data()||{};
+          const k=r.sid||'';
+          if(!k) return;
+          const obj = map.get(k) || {sid:r.sid,name:r.name||'',classId:r.classId,set:r.set,total:0,correct:0,count:0,lastAt:0};
+          obj.total += Number(r.points||0);
+          obj.correct += r.isCorrect?1:0;
+          obj.count += 1;
+          const ts = r.createdAt?.seconds || 0;
+          if (ts > obj.lastAt) obj.lastAt = ts;
+          map.set(k,obj);
+        });
+        const arr=[...map.values()];
+        arr.sort((a,b)=> b.total - a.total || (a.sid||'').localeCompare(b.sid||''));
+        renderAgg(arr);
+        aggStatus.textContent=`집계 완료 (${arr.length}명)`;
+      }catch(e){
+        console.error(e);
+        aggStatus.textContent='집계 실패';
+      }
+    }
+    function renderAgg(rows){
+      aggTableBody.innerHTML = rows.map(r=>{
+        const time = r.lastAt ? new Date(r.lastAt*1000).toLocaleString('ko-KR') : '-';
+        return `<tr>
+          <td>${r.classId||''}</td>
+          <td>${r.sid||''}</td>
+          <td>${r.name||''}</td>
+          <td>${r.total}</td>
+          <td>${r.correct}</td>
+          <td>${r.count}</td>
+          <td>${time}</td>
+        </tr>`;
+      }).join('');
+    }
   </script>
 </body>
 </html>
