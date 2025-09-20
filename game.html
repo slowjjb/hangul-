@@ -165,7 +165,7 @@
     let startTs = 0;
     let animFinished = false;
 
-    /* ========= ★ 추가: 한글 자모 분해 + 조각 선택 함수 ========= */
+    /* ========= 한글 자모 분해 + 조각 선택 ========= */
     function decomposeToJamo(str){
       const CHO  = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
       const JUNG = ["ㅏ","ㅐ","ㅑ","ㅒ","ㅓ","ㅔ","ㅕ","ㅖ","ㅗ","ㅘ","ㅙ","ㅚ","ㅛ","ㅜ","ㅝ","ㅞ","ㅟ","ㅠ","ㅡ","ㅢ","ㅣ"];
@@ -192,7 +192,6 @@
       if(!s) return [];
       return /[가-힣]/.test(s) ? decomposeToJamo(s) : Array.from(s);
     }
-    /* ========= 추가 끝 ========= */
 
     /* ---------- 인증 → 설정 구독 ---------- */
     onAuthStateChanged(auth, async (u)=>{
@@ -251,6 +250,7 @@
         attemptIdx = 0;
         speedScale = 1.0;
       } else {
+        // 같은 문제 재시작: 속도 10% 감속(바닥 보장)
         speedScale = Math.max(minFloor / fastMax, speedScale * 0.9);
       }
       buildLetters(curWord);
@@ -265,13 +265,19 @@
       const W = track.clientWidth;
       const H = track.clientHeight;
 
-      /** ★ 변경: 음절 대신 toPieces(word) 사용 (한글→자모, 영어→문자) */
+      // ★ 한글→자모, 영어→문자 단위로 조각 생성
       const pieces = toPieces(word);
+
+      // ★ 조각이 비어 있으면 바로 다음 문제로 스킵 (고착 방지)
+      if (pieces.length === 0) {
+        nextProblem(true);
+        return;
+      }
 
       for (let i=0; i<pieces.length; i++){
         const el = document.createElement("span");
         el.className = "ch";
-        el.textContent = pieces[i];                         // ★ 변경
+        el.textContent = pieces[i];
         const top = rand(TOP_PADDING, H - TOP_PADDING);
         el.style.top = top + "px";
         el.style.left = "-99999px";
@@ -316,6 +322,10 @@
       if (doneCount >= letters.length){
         animFinished = true;
         stopAnim();
+        // ★ 자동 다음 문제 진행 (모달 열려있지 않을 때)
+        if (running && !modal.classList.contains('open')) {
+          nextProblem(true); // 오답 처리로 넘기려면 handleWrongOrGiveUp(true)
+        }
         return;
       }
       rafId = requestAnimationFrame(tick);
@@ -375,7 +385,7 @@
         showBanner(false, "틀렸습니다!");
         await sleep(NEXT_DELAY_MS);
         hideBanner();
-        nextProblem(false);
+        nextProblem(false); // 같은 단어, 10% 감속하여 재시작
       }
     }
 
