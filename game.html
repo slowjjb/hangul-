@@ -68,30 +68,12 @@
     </div>
   </main>
 
-  <!-- 정답/오답 큰 배너 -->
-  <div id="bannerWrap" class="banner-wrap" aria-hidden="true">
-    <div id="banner" class="banner">정답입니다!</div>
-  </div>
-
-  <!-- 정답 입력 모달 -->
-  <div id="modal" class="modal" aria-hidden="true">
-    <div class="box">
-      <div style="font-weight:800; margin-bottom:8px;">정답 입력</div>
-      <div class="row">
-        <input id="answerInput" type="text" placeholder="철자를 입력 후 Enter" autocomplete="off" />
-        <button id="submitAnswer" class="btn primary">제출</button>
-      </div>
-      <div class="muted" style="margin-top:6px;">Enter 제출 · Esc 닫기</div>
-    </div>
-  </div>
-
-  <!-- 모듈 로드 실패 시 안내 타이머 -->
+  <!-- 로드 실패 안내용 타이머 -->
   <script>
     (function () {
       const p = new URLSearchParams(location.search);
       document.getElementById('headerMeta').textContent =
         `classId=${p.get('classId')||'(없음)'} · set=${p.get('set')||'(없음)'} · sid=${p.get('sid')||'(없음)'} · ${new Date().toLocaleString('ko-KR')}`;
-
       setTimeout(() => {
         if (!window.firebaseReady) {
           document.getElementById('authPill').textContent = '로딩 실패';
@@ -107,19 +89,12 @@
   <script type="module">
   (async () => {
     window.firebaseReady = false;
-
     const setPill = (id, t) => { const el=document.getElementById(id); if(el) el.textContent=t; };
 
     // 1) Firebase 동적 import (gstatic → 실패 시 esm.sh 폴백)
     async function loadFrom(label, urls){
-      try {
-        const mods = await Promise.all(urls.map(u => import(u)));
-        console.log('[firebase] loaded from', label);
-        return { ok:true, mods };
-      } catch(e) {
-        console.warn(`[firebase] ${label} failed`, e);
-        return { ok:false, error:e };
-      }
+      try { const mods = await Promise.all(urls.map(u => import(u))); return { ok:true, mods }; }
+      catch(e){ console.warn(`[firebase] ${label} failed`, e); return { ok:false, error:e }; }
     }
     let res = await loadFrom('gstatic', [
       'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
@@ -134,7 +109,6 @@
       ]);
       if (!res.ok) throw res.error || new Error('Firebase import failed');
     }
-
     const [appMod, fsMod, authMod] = res.mods;
     const { initializeApp } = appMod;
     const { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } = fsMod;
@@ -152,10 +126,9 @@
     const app  = initializeApp(firebaseConfig);
     const db   = getFirestore(app);
     const auth = getAuth(app);
+    window.firebaseReady = true;
 
-    window.firebaseReady = true; // 로딩 성공 신호
-
-    // ====== URL 파라미터/DOM ======
+    // ====== URL/DOM ======
     const p = new URLSearchParams(location.search);
     const classId = p.get("classId") || "";
     const setId   = p.get("set") || "";
@@ -178,9 +151,7 @@
 
     // ====== 규칙/상수 ======
     const pointsSeq = [10,8,6,4,2];
-    const OUT_MARGIN = 420;
-    const TOP_PADDING = 36;
-    const START_JITTER = 0.45;
+    const OUT_MARGIN = 420, TOP_PADDING = 36, START_JITTER = 0.45;
     const NEXT_DELAY_MS = 2000;
 
     // ====== 상태 ======
@@ -193,9 +164,10 @@
     let totalScore = 0;
     let speedScale = 1.0;
 
-    let letters = [];
-    let rafId = 0;
-    let startTs = 0;
+    let letters = []; let rafId = 0; let startTs = 0;
+
+    // ★ 추가: 실제 진행에 쓰는 플레이리스트
+    let gameList = [];
 
     // ====== 한글 자모 분해 / 영문 문자 ======
     function decomposeToJamo(str){
@@ -210,9 +182,8 @@
           const cho  = Math.floor(S/(21*28));
           const jung = Math.floor((S%(21*28))/28);
           const jong = S%28;
-          out.push(CHO[cho], JUNG[jung]);
-          if(jong) out.push(JONG[jong]);
-        } else { out.push(ch); }
+          out.push(CHO[cho], JUNG[jung]); if(jong) out.push(JONG[jong]);
+        } else out.push(ch);
       }
       return out;
     }
@@ -220,6 +191,17 @@
       const s = String(word||"").replace(/\s+/g,"");
       if(!s) return [];
       return /[가-힣]/.test(s) ? decomposeToJamo(s) : Array.from(s);
+    }
+
+    // ★ 추가: 중복 허용 플레이리스트 작성
+    function buildPlaylist(srcWords, n){
+      const pool = (srcWords||[]).map(s=>String(s).trim()).filter(Boolean);
+      if (pool.length===0 || n<=0) return [];
+      const arr = [];
+      while (arr.length < n){
+        arr.push(pool[Math.floor(Math.random()*pool.length)]);
+      }
+      return shuffle(arr);
     }
 
     // ====== 인증 → 설정 구독 ======
@@ -243,17 +225,20 @@
       onSnapshot(doc(db,"configs",cfgDocId()), (snap)=>{
         if (!snap.exists()){
           setPill("cfgPill","설정 없음");
-          stopAnim(); clearLetters(); running=false; msgEl.textContent="교사 설정 문서가 없습니다."; return;
+          stopAnim(); clearLetters(); running=false;
+          msgEl.textContent="교사 설정 문서가 없습니다."; return;
         }
         const cfg = snap.data()||{};
         words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
+
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
-        rounds = Math.min(reqRounds, Math.max(1, words.length));
+        rounds = reqRounds;                    // ★ 더 이상 단어 수로 캡하지 않음
+        roundTotalEl.textContent = String(rounds);
+
         const sp=cfg.speedBase||{};
         fastMin = Math.max(160, Number(sp.fastMin||420));
         fastMax = Math.max(fastMin, Number(sp.fastMax||520));
         minFloor= Math.max(120, Number(sp.minFloor||140));
-        roundTotalEl.textContent = String(rounds);
 
         setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
         if (!cfg.active){ stopAnim(); clearLetters(); running=false; msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…"; return; }
@@ -264,17 +249,25 @@
     // ====== 세션 진행 ======
     function startSession(){
       totalScore = 0; scoreEl.textContent = "0";
-      curIndex = -1; running = true;
-      words = shuffle(words).slice(0, rounds);
+      curIndex = -1; running = true; attemptIdx = 0; speedScale = 1.0;
+
+      // ★ 요청 라운드 수만큼 플레이리스트 구성(중복 허용)
+      gameList = buildPlaylist(words, rounds);
+      if (gameList.length === 0){
+        msgEl.textContent = "단어 목록이 비어 있습니다.";
+        running = false; return;
+      }
+
       msgEl.textContent = "게임 시작!";
       nextProblem(true);
     }
+
     function nextProblem(newRound){
       if (newRound){
         curIndex++;
         if (curIndex >= rounds){ endSession(); return; }
         roundNowEl.textContent = String(curIndex+1);
-        curWord = String(words[curIndex] || "");
+        curWord = String(gameList[curIndex] || "");   // ★ 여기서 gameList 사용
         attemptIdx = 0;
         speedScale = 1.0;
       } else {
@@ -286,10 +279,8 @@
     }
 
     function buildLetters(word){
-      clearLetters();
-      letters = [];
+      clearLetters(); letters = [];
       const H = track.clientHeight;
-
       const pieces = toPieces(word);
       if (pieces.length === 0) { nextProblem(true); return; }
 
@@ -418,19 +409,15 @@
       msgEl.textContent = "세트 종료! 총점: " + totalScore;
       try{
         await setDoc(doc(db,"sessions",[classId,setId,sid,Date.now()].join("_")), {
-          classId, set:setId, sid, name,
-          totalPoints: totalScore,
-          rounds,
-          finishedAt: serverTimestamp()
+          classId, set:setId, sid, name, totalPoints: totalScore, rounds, finishedAt: serverTimestamp()
         });
       }catch(e){ console.error("session save error", e); }
     }
 
     // ====== 유틸 ======
     function rand(a,b){ return a + Math.random()*(b-a); }
-    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j]], [x[j],x[i]] } return x; }
+    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j]],[x[j],x[i]] } return x; }
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
-
   })().catch(e=>{
     console.error(e);
     document.getElementById('authPill').textContent='로딩 실패';
