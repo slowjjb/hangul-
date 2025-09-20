@@ -34,6 +34,7 @@
   </header>
 
   <main>
+    <!-- 세트 선택/목록 관리 -->
     <div class="card" style="margin-bottom:16px;">
       <div class="row">
         <div class="col" style="min-width:220px;flex:1;">
@@ -45,9 +46,8 @@
           <input id="setId" placeholder="예: lesson1" />
         </div>
 
-        <!-- 세트 목록 -->
         <div class="col" style="min-width:260px;flex:1;">
-          <label>세트 목록(해당 classId의 configs)</label>
+          <label>세트 목록</label>
           <select id="setList">
             <option value="">(classId 입력 후 새로고침)</option>
           </select>
@@ -67,6 +67,7 @@
       <div class="muted">로그인: <a href="teacher-login.html" style="color:#93c5fd;">teacher-login.html</a></div>
     </div>
 
+    <!-- 세트 상세 관리 -->
     <div class="card">
       <div class="row">
         <div class="col" style="flex:1 1 320px;">
@@ -94,6 +95,11 @@
         </div>
       </div>
 
+      <!-- ✅ 공개 세트 여부 체크박스 -->
+      <div class="col" style="margin-top:10px;">
+        <label><input type="checkbox" id="isPublic" /> 공개 세트 (누구나 선택 가능)</label>
+      </div>
+
       <div class="row" style="margin-top:16px;">
         <button class="btn" id="btnLoadByIds">입력값으로 불러오기</button>
         <button class="btn blue" id="btnSave">저장</button>
@@ -112,14 +118,11 @@
       getFirestore, doc, getDoc, setDoc, deleteDoc,
       collection, query, where, getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import {
-      getAuth, onAuthStateChanged, signInAnonymously
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     // ✅ 교사 UID
     const TEACHER_UIDS = ["5lgNILjYd9eOICKua6vbm1hcRny2"];
 
-    // Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -132,20 +135,18 @@
     const db  = getFirestore(app);
     const auth = getAuth(app);
 
-    // elements
     const els = {
       meta: document.getElementById('meta'),
       roleInfo: document.getElementById('roleInfo'),
       classId: document.getElementById('classId'),
       setId: document.getElementById('setId'),
       setList: document.getElementById('setList'),
-
       wordsBox: document.getElementById('wordsBox'),
       rounds: document.getElementById('rounds'),
       fastMin: document.getElementById('fastMin'),
       fastMax: document.getElementById('fastMax'),
       minFloor: document.getElementById('minFloor'),
-
+      isPublic: document.getElementById('isPublic'),
       btnRefresh: document.getElementById('btnRefresh'),
       btnLoad: document.getElementById('btnLoad'),
       btnDelete: document.getElementById('btnDelete'),
@@ -153,14 +154,12 @@
       btnSave: document.getElementById('btnSave'),
       btnStart: document.getElementById('btnStart'),
       btnStop: document.getElementById('btnStop'),
-
       toast: document.getElementById('toast'),
     };
 
     const docId = (c,s)=> `${c}_${s}`;
     const toast = (t)=> els.toast.textContent = t;
 
-    // 로컬 편의
     function saveLocal(){
       localStorage.setItem('teacher.classId', els.classId.value.trim());
       localStorage.setItem('teacher.setId', els.setId.value.trim());
@@ -175,25 +174,20 @@
 
     onAuthStateChanged(auth, async (u)=>{
       if (!u) {
-        // 비로그인 → 우선 익명으로라도 인증(읽기/저장 허용 용도)
         try { await signInAnonymously(auth); } catch(e){ console.error(e); }
         return;
       }
-      // 권한 체크
       isTeacher = TEACHER_UIDS.includes(u.uid);
       els.meta.textContent = `인증됨: uid=${u.uid}${u.email? ' · '+u.email:''} · ${new Date().toLocaleString('ko-KR')}`;
-      els.roleInfo.textContent = isTeacher ? '권한: 교사 · 삭제/세션 제어 가능' : '권한: 익명/학생 · 삭제/세션 제어 비활성화';
+      els.roleInfo.textContent = isTeacher ? '권한: 교사 · 삭제/세션 제어 가능' : '권한: 익명/학생 · 삭제/세션 제어 불가';
 
-      // 버튼 권한 반영
       els.btnDelete.disabled = !isTeacher;
       els.btnStart.disabled = !isTeacher;
       els.btnStop.disabled  = !isTeacher;
 
-      // 목록 자동 로드
       refreshList();
     });
 
-    // 목록 채우기
     async function refreshList(){
       const c = els.classId.value.trim();
       if (!c){ toast('classId를 먼저 입력하세요.'); return; }
@@ -204,7 +198,7 @@
         qSnap.forEach(d => {
           const data = d.data() || {};
           const set = data.set || (d.id.split('_')[1] || '');
-          options.push(`<option value="${set}">${set}</option>`);
+          options.push(`<option value="${set}">${set}${data.public?' (공개)':''}</option>`);
         });
         els.setList.innerHTML = options.length ? options.join('') : `<option value="">(세트 없음)</option>`;
         toast(`세트 ${options.length}개`);
@@ -215,7 +209,6 @@
       }
     }
 
-    // 불러오기
     async function loadConfig(c, s){
       if (!c || !s){ toast('classId, set을 입력하세요.'); return; }
       try{
@@ -229,6 +222,7 @@
         els.fastMin.value = cfg.speedBase?.fastMin ?? 420;
         els.fastMax.value = cfg.speedBase?.fastMax ?? 520;
         els.minFloor.value = cfg.speedBase?.minFloor ?? 140;
+        els.isPublic.checked = !!cfg.public; // ✅ 공개 여부 반영
         toast(`불러옴: ${docId(c,s)} (active=${cfg.active? 'true':'false'})`);
         saveLocal();
       }catch(e){
@@ -237,7 +231,6 @@
       }
     }
 
-    // 저장(+세션 시작/중지)
     async function saveConfig(activeFlag=null){
       const c = els.classId.value.trim();
       const s = els.setId.value.trim();
@@ -251,6 +244,7 @@
       const cfg = {
         classId: c,
         set: s,
+        public: els.isPublic.checked,  // ✅ 저장
         words,
         rounds: Math.max(1, Number(els.rounds.value||1)),
         speedBase: {
@@ -276,7 +270,6 @@
       }
     }
 
-    // 삭제
     async function deleteConfig(){
       if (!isTeacher){ toast('삭제는 교사만 가능합니다.'); return; }
       const c = els.classId.value.trim();
@@ -294,16 +287,9 @@
       }
     }
 
-    // 이벤트
     els.btnRefresh.addEventListener('click', refreshList);
-    els.btnLoad.addEventListener('click', ()=>{
-      const c = els.classId.value.trim();
-      const s = els.setList.value || els.setId.value.trim();
-      loadConfig(c,s);
-    });
-    els.btnLoadByIds.addEventListener('click', ()=>{
-      loadConfig(els.classId.value.trim(), els.setId.value.trim());
-    });
+    els.btnLoad.addEventListener('click', ()=> loadConfig(els.classId.value.trim(), els.setList.value || els.setId.value.trim()));
+    els.btnLoadByIds.addEventListener('click', ()=> loadConfig(els.classId.value.trim(), els.setId.value.trim()));
     els.btnSave.addEventListener('click', ()=> saveConfig(null));
     els.btnStart.addEventListener('click', ()=> saveConfig(true));
     els.btnStop.addEventListener('click', ()=> saveConfig(false));
