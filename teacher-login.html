@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>교사용 로그인</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif; color-scheme: dark; }
+    body { margin:0; background:#0f172a; color:#e5e7eb; display:grid; place-items:center; min-height:100vh; }
+    .card { width:min(420px, 92vw); background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:18px; }
+    h1 { margin:0 0 12px; font-size:20px; }
+    label{ font-size:13px; color:#93a4b5; }
+    input{ width:100%; padding:10px 12px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#fff; font-size:15px; }
+    .row{ display:flex; gap:8px; align-items:center; }
+    .btn{ border:1px solid #64748b; background:#111827; color:#fff; padding:9px 14px; border-radius:10px; font-weight:700; cursor:pointer; }
+    .btn.blue{ background:#2563eb; border-color:#2563eb; }
+    .muted{ color:#9aa9b8; font-size:12px; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>교사용 로그인</h1>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div>
+        <label>이메일</label>
+        <input id="email" type="email" placeholder="teacher@example.com" />
+      </div>
+      <div>
+        <label>비밀번호</label>
+        <input id="password" type="password" placeholder="••••••••" />
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <button id="btnLogin" class="btn blue" style="flex:1;">로그인</button>
+        <button id="btnLogout" class="btn" style="flex:1;">로그아웃</button>
+      </div>
+      <div id="me" class="muted">상태: 인증 대기…</div>
+      <div class="muted">로그인에 성공하면 <code>teacher.html</code>로 이동합니다.</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    // Firebase 설정 (동일)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
+      authDomain: "grade-6-english-c17f3.firebaseapp.com",
+      projectId: "grade-6-english-c17f3",
+      storageBucket: "grade-6-english-c17f3.appspot.com",
+      messagingSenderId: "676305839050",
+      appId: "1:676305839050:web:a5399633e7b828883fe533"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const me = document.getElementById('me');
+    const email = document.getElementById('email');
+    const password = document.getElementById('password');
+
+    onAuthStateChanged(auth, (u)=>{
+      if (u) {
+        me.textContent = `로그인됨: uid=${u.uid}${u.email? ' · '+u.email:''}`;
+      } else {
+        me.textContent = '상태: 로그아웃';
+      }
+    });
+
+    document.getElementById('btnLogin').addEventListener('click', async ()=>{
+      try{
+        const { user } = await signInWithEmailAndPassword(auth, email.value.trim(), password.value);
+        me.textContent = `로그인 성공: uid=${user.uid}${user.email? ' · '+user.email:''}`;
+        // 바로 대시보드로 이동
+        location.href = 'teacher.html';
+      }catch(e){
+        me.textContent = '로그인 실패: ' + (e?.message || e);
+        console.error(e);
+      }
+    });
+
+    document.getElementById('btnLogout').addEventListener('click', async ()=>{
+      try{ await signOut(auth); me.textContent='로그아웃 완료'; }catch(e){ console.error(e); }
+    });
+  </script>
+</body>
+</html>
