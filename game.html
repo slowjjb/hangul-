@@ -156,8 +156,12 @@
     const setId   = p.get("set") || "";
     const sid     = p.get("sid") || "";
     const name    = p.get("name") || "제출원";
-    document.getElementById("headerMeta").textContent =
-      `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · ${new Date().toLocaleString("ko-KR")}`;
+
+    function updateHeaderMeta(runIdForView=runId){
+      document.getElementById("headerMeta").textContent =
+        `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · run=${runIdForView} · ${new Date().toLocaleString("ko-KR")}`;
+    }
+    updateHeaderMeta(0);
 
     const track = document.getElementById("track");
     const wordEl = document.getElementById("wordEl");
@@ -180,6 +184,10 @@
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
+
+    // ⬇️ runId(세션 번호) 상태
+    let runId = 0;
+    let lastRunId = null;
 
     let user = null, running = false;
     let curIndex = -1, curWord = "", attemptIdx = 0;
@@ -251,10 +259,14 @@
           msgEl.textContent="교사 설정 문서가 없습니다."; return;
         }
         const cfg = snap.data()||{};
-        words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
 
+        // ⬇️ runId 갱신
+        runId = Number(cfg.runId || 0);
+        updateHeaderMeta(runId);
+
+        words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
-        rounds = reqRounds;                          // ← 단어 수로 캡하지 않음
+        rounds = reqRounds;
         roundTotalEl.textContent = String(rounds);
 
         const sp=cfg.speedBase||{};
@@ -263,13 +275,25 @@
         minFloor= Math.max(120, Number(sp.minFloor||140));
 
         setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
-        if (!cfg.active){ stopAnim(); clearLetters(); running=false; msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…"; return; }
-        if (!running) startSession();
+
+        // ⬇️ active이고 (처음시작이거나 runId가 바뀌면) 새 세션 시작
+        if (!cfg.active){
+          stopAnim(); clearLetters(); running=false;
+          msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…";
+          return;
+        }
+        if (!running || lastRunId !== runId){
+          startSession();
+          lastRunId = runId;
+        }
       }, (err)=>{ console.error(err); setPill("cfgPill","설정 오류"); });
     }
 
     // 세션 진행
     function startSession(){
+      // 이전 애니/화면 정리
+      stopAnim(); clearLetters();
+
       totalScore = 0; scoreEl.textContent = "0";
       curIndex = -1; attemptIdx = 0; speedScale = 1.0;
       running = true;
@@ -427,6 +451,8 @@
       try{
         await addDoc(collection(db,"results"), {
           classId, set:setId, sid, name,
+          // ⬇️ runId 함께 기록 (집계 리셋용)
+          runId,
           word: curWord,
           attemptIndex: attemptIdx,
           isCorrect: !!isCorrect,
@@ -444,7 +470,12 @@
       msgEl.textContent = "세트 종료! 총점: " + totalScore;
       try{
         await setDoc(doc(db,"sessions",[classId,setId,sid,Date.now()].join("_")), {
-          classId, set:setId, sid, name, totalPoints: totalScore, rounds, finishedAt: serverTimestamp()
+          classId, set:setId, sid, name,
+          // ⬇️ runId 함께 기록
+          runId,
+          totalPoints: totalScore,
+          rounds,
+          finishedAt: serverTimestamp()
         });
       }catch(e){ console.error("session save error", e); }
     }
@@ -455,7 +486,6 @@
       const x = a.slice();
       for (let i = x.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        // ✅ 올바른 구조 분해 치환
         [x[i], x[j]] = [x[j], x[i]];
       }
       return x;
