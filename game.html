@@ -85,69 +85,62 @@
     </div>
   </div>
 
+  <!-- 모듈 로드 실패 시 안내 타이머 -->
   <script>
-  (function () {
-    // URL 파라미터를 모듈 밖에서 먼저 반영 (모듈이 막혀도 헤더는 바뀜)
-    const p = new URLSearchParams(location.search);
-    const headerMeta = document.getElementById('headerMeta');
-    headerMeta.textContent =
-      `classId=${p.get('classId')||'(없음)'} · set=${p.get('set')||'(없음)'} · sid=${p.get('sid')||'(없음)'} · ${new Date().toLocaleString('ko-KR')}`;
+    (function () {
+      const p = new URLSearchParams(location.search);
+      document.getElementById('headerMeta').textContent =
+        `classId=${p.get('classId')||'(없음)'} · set=${p.get('set')||'(없음)'} · sid=${p.get('sid')||'(없음)'} · ${new Date().toLocaleString('ko-KR')}`;
 
-    // 2.5초 안에 Firebase 초기화 신호가 없으면 사용자에게 안내
-    setTimeout(() => {
-      if (!window.firebaseReady) {
-        document.getElementById('authPill').textContent = '로딩 실패';
-        document.getElementById('cfgPill').textContent = '네트워크/차단 확인';
-        document.getElementById('message').textContent =
-          'Firebase 로드에 실패했습니다. Ctrl+F5 또는 시크릿 창으로 열어보거나, 광고차단/보안 확장프로그램을 잠시 꺼주세요.';
-      }
-    }, 2500);
-  })();
-</script>
+      setTimeout(() => {
+        if (!window.firebaseReady) {
+          document.getElementById('authPill').textContent = '로딩 실패';
+          document.getElementById('cfgPill').textContent = '네트워크/차단 확인';
+          document.getElementById('message').textContent =
+            'Firebase 로드에 실패했습니다. Ctrl+F5 또는 시크릿 창으로 열어보거나, 광고차단/보안 확장프로그램을 잠시 꺼주세요.';
+        }
+      }, 2500);
+    })();
+  </script>
 
+  <!-- 실제 앱 코드 -->
   <script type="module">
+  (async () => {
+    window.firebaseReady = false;
 
-    /* ---------- Firebase 동적 import ---------- */
-try {
-  const [{ initializeApp }, firestoreMod, authMod] = await Promise.all([
-    import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js'),
-    import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'),
-    import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js'),
-  ]);
+    const setPill = (id, t) => { const el=document.getElementById(id); if(el) el.textContent=t; };
 
-  // 기존에 정적 import 하던 심볼을 여기서 꺼냄
-  const { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } = firestoreMod;
-  const { getAuth, onAuthStateChanged, signInAnonymously } = authMod;
+    // 1) Firebase 동적 import (gstatic → 실패 시 esm.sh 폴백)
+    async function loadFrom(label, urls){
+      try {
+        const mods = await Promise.all(urls.map(u => import(u)));
+        console.log('[firebase] loaded from', label);
+        return { ok:true, mods };
+      } catch(e) {
+        console.warn(`[firebase] ${label} failed`, e);
+        return { ok:false, error:e };
+      }
+    }
+    let res = await loadFrom('gstatic', [
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js',
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js',
+    ]);
+    if (!res.ok) {
+      res = await loadFrom('esm.sh', [
+        'https://esm.sh/firebase@10.12.2/app?target=es2022',
+        'https://esm.sh/firebase@10.12.2/firestore?target=es2022',
+        'https://esm.sh/firebase@10.12.2/auth?target=es2022',
+      ]);
+      if (!res.ok) throw res.error || new Error('Firebase import failed');
+    }
 
-  /* ---------- Firebase ---------- */
-  const firebaseConfig = {
-    apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
-    authDomain: "grade-6-english-c17f3.firebaseapp.com",
-    projectId: "grade-6-english-c17f3",
-    storageBucket: "grade-6-english-c17f3.appspot.com",
-    messagingSenderId: "676305839050",
-    appId: "1:676305839050:web:a5399633e7b828883fe533"
-  };
-  const app  = initializeApp(firebaseConfig);
-  const db   = getFirestore(app);
-  const auth = getAuth(app);
+    const [appMod, fsMod, authMod] = res.mods;
+    const { initializeApp } = appMod;
+    const { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } = fsMod;
+    const { getAuth, onAuthStateChanged, signInAnonymously } = authMod;
 
-  // 진단 타이머에게 "정상 로드" 신호 보내기
-  window.firebaseReady = true;
-
-  // ⬇️⬇️⬇️ 여기부터는 네가 쓰던 기존 코드(인증/구독/게임 로직) 그대로 ⬇️⬇️⬇️
-
-} catch (e) {
-  console.error('Firebase 로드 실패', e);
-  document.getElementById('authPill').textContent = '로딩 실패';
-  document.getElementById('cfgPill').textContent  = '네트워크/차단 확인';
-  document.getElementById('message').textContent =
-    'Firebase 모듈을 로드하지 못했습니다. 시크릿 창/다른 네트워크/광고차단 해제 후 다시 시도하세요.';
-  // 여기서 return; 해도 됨
-}
-
-
-    /* ---------- Firebase ---------- */
+    // 2) Firebase 초기화
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -156,11 +149,13 @@ try {
       messagingSenderId: "676305839050",
       appId: "1:676305839050:web:a5399633e7b828883fe533"
     };
-    const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
+    const app  = initializeApp(firebaseConfig);
+    const db   = getFirestore(app);
     const auth = getAuth(app);
 
-    /* ---------- URL 파라미터 ---------- */
+    window.firebaseReady = true; // 로딩 성공 신호
+
+    // ====== URL 파라미터/DOM ======
     const p = new URLSearchParams(location.search);
     const classId = p.get("classId") || "";
     const setId   = p.get("set") || "";
@@ -169,7 +164,6 @@ try {
     document.getElementById("headerMeta").textContent =
       `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · ${new Date().toLocaleString("ko-KR")}`;
 
-    /* ---------- DOM ---------- */
     const track = document.getElementById("track");
     const wordEl = document.getElementById("wordEl");
     const scoreEl = document.getElementById("score");
@@ -182,14 +176,14 @@ try {
     const bannerWrap = document.getElementById("bannerWrap");
     const banner = document.getElementById("banner");
 
-    /* ---------- 규칙/상수 ---------- */
+    // ====== 규칙/상수 ======
     const pointsSeq = [10,8,6,4,2];
     const OUT_MARGIN = 420;
     const TOP_PADDING = 36;
     const START_JITTER = 0.45;
     const NEXT_DELAY_MS = 2000;
 
-    /* ---------- 상태 ---------- */
+    // ====== 상태 ======
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
@@ -203,13 +197,12 @@ try {
     let rafId = 0;
     let startTs = 0;
 
-    /* ========= 한글 자모 분해 + 조각 선택 ========= */
+    // ====== 한글 자모 분해 / 영문 문자 ======
     function decomposeToJamo(str){
       const CHO  = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
       const JUNG = ["ㅏ","ㅐ","ㅑ","ㅒ","ㅓ","ㅔ","ㅕ","ㅖ","ㅗ","ㅘ","ㅙ","ㅚ","ㅛ","ㅜ","ㅝ","ㅞ","ㅟ","ㅠ","ㅡ","ㅢ","ㅣ"];
       const JONG = ["","ㄱ","ㄲ","ㄳ","ㄴ","ㄵ","ㄶ","ㄷ","ㄹ","ㄺ","ㄻ","ㄼ","ㄽ","ㄾ","ㄿ","ㅀ","ㅁ","ㅂ","ㅄ","ㅅ","ㅆ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
-      const base=0xAC00, last=0xD7A3;
-      const out=[];
+      const base=0xAC00, last=0xD7A3, out=[];
       for(const ch of str){
         const code = ch.codePointAt(0);
         if(code>=base && code<=last){
@@ -219,19 +212,17 @@ try {
           const jong = S%28;
           out.push(CHO[cho], JUNG[jung]);
           if(jong) out.push(JONG[jong]);
-        }else{
-          out.push(ch);
-        }
+        } else { out.push(ch); }
       }
       return out;
     }
     function toPieces(word){
-      const s = String(word||"").replace(/\s+/g,""); // 공백 제거
+      const s = String(word||"").replace(/\s+/g,"");
       if(!s) return [];
       return /[가-힣]/.test(s) ? decomposeToJamo(s) : Array.from(s);
     }
 
-    /* ---------- 인증 → 설정 구독 ---------- */
+    // ====== 인증 → 설정 구독 ======
     onAuthStateChanged(auth, async (u)=>{
       if (!u){
         setPill("authPill","익명 인증 중…");
@@ -243,16 +234,17 @@ try {
       subscribeConfig();
     });
 
-    function setPill(id, t){ document.getElementById(id).textContent = t; }
     function cfgDocId(){ return `${classId}_${setId}`; }
-
     function subscribeConfig(){
       if (!classId || !setId){
         msgEl.textContent = "URL에 classId, set이 필요합니다. 예) ?classId=6-1&set=lesson1&sid=01&name=민수";
         return;
       }
       onSnapshot(doc(db,"configs",cfgDocId()), (snap)=>{
-        if (!snap.exists()){ setPill("cfgPill","설정 없음"); stopAnim(); clearLetters(); running=false; msgEl.textContent="교사 설정 문서가 없습니다."; return; }
+        if (!snap.exists()){
+          setPill("cfgPill","설정 없음");
+          stopAnim(); clearLetters(); running=false; msgEl.textContent="교사 설정 문서가 없습니다."; return;
+        }
         const cfg = snap.data()||{};
         words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
@@ -264,13 +256,12 @@ try {
         roundTotalEl.textContent = String(rounds);
 
         setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
-
         if (!cfg.active){ stopAnim(); clearLetters(); running=false; msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…"; return; }
         if (!running) startSession();
       }, (err)=>{ console.error(err); setPill("cfgPill","설정 오류"); });
     }
 
-    /* ---------- 세션/문제 진행 ---------- */
+    // ====== 세션 진행 ======
     function startSession(){
       totalScore = 0; scoreEl.textContent = "0";
       curIndex = -1; running = true;
@@ -278,7 +269,6 @@ try {
       msgEl.textContent = "게임 시작!";
       nextProblem(true);
     }
-
     function nextProblem(newRound){
       if (newRound){
         curIndex++;
@@ -300,10 +290,7 @@ try {
       letters = [];
       const H = track.clientHeight;
 
-      // 한글→자모, 영어→문자
       const pieces = toPieces(word);
-
-      // 조각이 없으면 바로 다음 문제(고착 방지)
       if (pieces.length === 0) { nextProblem(true); return; }
 
       for (let i=0; i<pieces.length; i++){
@@ -351,15 +338,11 @@ try {
         }
         L.el.style.left = x + "px";
       }
-      if (doneCount >= letters.length){
-        // ★ 자동 진행 제거: 여기서는 그냥 멈추기만 함
-        stopAnim();
-        return;
-      }
+      if (doneCount >= letters.length){ stopAnim(); return; } // 자동 진행 없음
       rafId = requestAnimationFrame(tick);
     }
 
-    /* ---------- 입력/판정 + 배너 ---------- */
+    // ====== 입력/판정 ======
     document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
     document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
     document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp());
@@ -378,10 +361,7 @@ try {
       bannerWrap.classList.add("open");
       bannerWrap.setAttribute("aria-hidden","false");
     }
-    function hideBanner(){
-      bannerWrap.classList.remove("open");
-      bannerWrap.setAttribute("aria-hidden","true");
-    }
+    function hideBanner(){ bannerWrap.classList.remove("open"); bannerWrap.setAttribute("aria-hidden","true"); }
 
     async function submitAnswer(){
       const val=(input.value||"").trim(); if (!val) return;
@@ -396,7 +376,7 @@ try {
         hideBanner();
         nextProblem(true);           // 정답 → 다음 문제
       } else {
-        await handleWrongOrGiveUp(true);
+        await handleWrongOrGiveUp();
       }
     }
 
@@ -416,7 +396,7 @@ try {
       }
     }
 
-    /* ---------- 결과 저장/세션 종료 ---------- */
+    // ====== 결과 저장/세션 종료 ======
     async function log({isCorrect, points}){
       try{
         await addDoc(collection(db,"results"), {
@@ -430,7 +410,6 @@ try {
         });
       }catch(e){ console.error("save result error", e); }
     }
-
     async function endSession(){
       running=false; stopAnim(); clearLetters();
       showBanner(true, `세트 종료! 총점: ${totalScore}`);
@@ -447,11 +426,17 @@ try {
       }catch(e){ console.error("session save error", e); }
     }
 
-    /* ---------- 유틸 ---------- */
-    function setPill(id, t){ document.getElementById(id).textContent = t; }
+    // ====== 유틸 ======
     function rand(a,b){ return a + Math.random()*(b-a); }
     function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j]], [x[j],x[i]] } return x; }
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
+  })().catch(e=>{
+    console.error(e);
+    document.getElementById('authPill').textContent='로딩 실패';
+    document.getElementById('cfgPill').textContent='네트워크/차단 확인';
+    document.getElementById('message').textContent='Firebase 모듈을 로드하지 못했습니다. 시크릿 창/다른 네트워크/확장 OFF 후 재시도하세요.';
+  });
   </script>
 </body>
 </html>
