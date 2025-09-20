@@ -26,13 +26,14 @@
     .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
     .muted { color:#93a4b5; font-size:12px; }
 
+    /* 배너/모달 레이어 우선순위: 배너 50, 모달 60 */
     .banner-wrap { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:50; }
     .banner-wrap.open { display:flex; }
     .banner { min-width:320px; max-width:90vw; text-align:center; color:#fff; font-weight:900; font-size:24px; padding:18px 26px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); }
     .banner.ok { background:#1e40af; }
     .banner.no { background:#991b1b; }
 
-    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:40; }
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:60; } /* ↑ 60으로 */
     .modal.open { display:flex; }
     .modal .box { width:min(520px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
     .row { display:flex; gap:8px; align-items:center; }
@@ -68,7 +69,24 @@
     </div>
   </main>
 
-  <!-- 로드 실패 안내용 타이머 -->
+  <!-- 배너 -->
+  <div id="bannerWrap" class="banner-wrap" aria-hidden="true">
+    <div id="banner" class="banner">정답입니다!</div>
+  </div>
+
+  <!-- 모달 -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="box">
+      <div style="font-weight:800; margin-bottom:8px;">정답 입력</div>
+      <div class="row">
+        <input id="answerInput" type="text" placeholder="철자를 입력 후 Enter" autocomplete="off" />
+        <button id="submitAnswer" class="btn primary">제출</button>
+      </div>
+      <div class="muted" style="margin-top:6px;">Enter 제출 · Esc 닫기</div>
+    </div>
+  </div>
+
+  <!-- 로드 실패 안내 -->
   <script>
     (function () {
       const p = new URLSearchParams(location.search);
@@ -85,13 +103,13 @@
     })();
   </script>
 
-  <!-- 실제 앱 코드 -->
+  <!-- 앱 코드 -->
   <script type="module">
   (async () => {
     window.firebaseReady = false;
     const setPill = (id, t) => { const el=document.getElementById(id); if(el) el.textContent=t; };
 
-    // 1) Firebase 동적 import (gstatic → 실패 시 esm.sh 폴백)
+    // Firebase 동적 import (gstatic → esm.sh 폴백)
     async function loadFrom(label, urls){
       try { const mods = await Promise.all(urls.map(u => import(u))); return { ok:true, mods }; }
       catch(e){ console.warn(`[firebase] ${label} failed`, e); return { ok:false, error:e }; }
@@ -114,7 +132,7 @@
     const { getFirestore, doc, onSnapshot, collection, addDoc, serverTimestamp, setDoc } = fsMod;
     const { getAuth, onAuthStateChanged, signInAnonymously } = authMod;
 
-    // 2) Firebase 초기화
+    // Firebase 초기화
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -128,7 +146,7 @@
     const auth = getAuth(app);
     window.firebaseReady = true;
 
-    // ====== URL/DOM ======
+    // URL/DOM
     const p = new URLSearchParams(location.search);
     const classId = p.get("classId") || "";
     const setId   = p.get("set") || "";
@@ -149,12 +167,12 @@
     const bannerWrap = document.getElementById("bannerWrap");
     const banner = document.getElementById("banner");
 
-    // ====== 규칙/상수 ======
+    // 규칙/상수
     const pointsSeq = [10,8,6,4,2];
     const OUT_MARGIN = 420, TOP_PADDING = 36, START_JITTER = 0.45;
     const NEXT_DELAY_MS = 2000;
 
-    // ====== 상태 ======
+    // 상태
     let words = [];
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
@@ -166,10 +184,10 @@
 
     let letters = []; let rafId = 0; let startTs = 0;
 
-    // ★ 추가: 실제 진행에 쓰는 플레이리스트
+    // 진행에 쓰는 플레이리스트(중복 허용)
     let gameList = [];
 
-    // ====== 한글 자모 분해 / 영문 문자 ======
+    // 자모 분해 / 문자 분해
     function decomposeToJamo(str){
       const CHO  = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
       const JUNG = ["ㅏ","ㅐ","ㅑ","ㅒ","ㅓ","ㅔ","ㅕ","ㅖ","ㅗ","ㅘ","ㅙ","ㅚ","ㅛ","ㅜ","ㅝ","ㅞ","ㅟ","ㅠ","ㅡ","ㅢ","ㅣ"];
@@ -193,7 +211,7 @@
       return /[가-힣]/.test(s) ? decomposeToJamo(s) : Array.from(s);
     }
 
-    // ★ 추가: 중복 허용 플레이리스트 작성
+    // 플레이리스트(요청 라운드 수만큼 중복 허용 채움)
     function buildPlaylist(srcWords, n){
       const pool = (srcWords||[]).map(s=>String(s).trim()).filter(Boolean);
       if (pool.length===0 || n<=0) return [];
@@ -204,7 +222,7 @@
       return shuffle(arr);
     }
 
-    // ====== 인증 → 설정 구독 ======
+    // 인증 → 설정 구독
     onAuthStateChanged(auth, async (u)=>{
       if (!u){
         setPill("authPill","익명 인증 중…");
@@ -232,7 +250,7 @@
         words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
 
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
-        rounds = reqRounds;                    // ★ 더 이상 단어 수로 캡하지 않음
+        rounds = reqRounds;                          // ← 단어 수로 캡하지 않음
         roundTotalEl.textContent = String(rounds);
 
         const sp=cfg.speedBase||{};
@@ -246,18 +264,17 @@
       }, (err)=>{ console.error(err); setPill("cfgPill","설정 오류"); });
     }
 
-    // ====== 세션 진행 ======
+    // 세션 진행
     function startSession(){
       totalScore = 0; scoreEl.textContent = "0";
-      curIndex = -1; running = true; attemptIdx = 0; speedScale = 1.0;
+      curIndex = -1; attemptIdx = 0; speedScale = 1.0;
+      running = true;
 
-      // ★ 요청 라운드 수만큼 플레이리스트 구성(중복 허용)
       gameList = buildPlaylist(words, rounds);
       if (gameList.length === 0){
         msgEl.textContent = "단어 목록이 비어 있습니다.";
         running = false; return;
       }
-
       msgEl.textContent = "게임 시작!";
       nextProblem(true);
     }
@@ -267,7 +284,7 @@
         curIndex++;
         if (curIndex >= rounds){ endSession(); return; }
         roundNowEl.textContent = String(curIndex+1);
-        curWord = String(gameList[curIndex] || "");   // ★ 여기서 gameList 사용
+        curWord = String(gameList[curIndex] || "");
         attemptIdx = 0;
         speedScale = 1.0;
       } else {
@@ -281,8 +298,10 @@
     function buildLetters(word){
       clearLetters(); letters = [];
       const H = track.clientHeight;
-      const pieces = toPieces(word);
-      if (pieces.length === 0) { nextProblem(true); return; }
+
+      // ⬇️ 조각이 0개면 "건너뛰기" 금지 — 원문 1조각으로 진행
+      let pieces = toPieces(word);
+      if (pieces.length === 0) pieces = [String(word||'')];
 
       for (let i=0; i<pieces.length; i++){
         const el = document.createElement("span");
@@ -333,7 +352,7 @@
       rafId = requestAnimationFrame(tick);
     }
 
-    // ====== 입력/판정 ======
+    // 입력/판정
     document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
     document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
     document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp());
@@ -342,7 +361,13 @@
       else if (e.key==="Escape"){ modal.classList.contains("open")?closeModal():handleWrongOrGiveUp(); }
     });
 
-    function openModal(){ modal.classList.add("open"); modal.setAttribute("aria-hidden","false"); input.value=""; input.focus(); }
+    function openModal(){
+      hideBanner();                              // ← 배너가 떠 있으면 먼저 닫아 클릭 막힘 방지
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden","false");
+      input.value="";
+      input.focus();
+    }
     function closeModal(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden","true"); }
     function normalize(s){ return String(s).toLowerCase().replace(/\s+/g,"").trim(); }
 
@@ -352,7 +377,10 @@
       bannerWrap.classList.add("open");
       bannerWrap.setAttribute("aria-hidden","false");
     }
-    function hideBanner(){ bannerWrap.classList.remove("open"); bannerWrap.setAttribute("aria-hidden","true"); }
+    function hideBanner(){
+      bannerWrap.classList.remove("open");
+      bannerWrap.setAttribute("aria-hidden","true");
+    }
 
     async function submitAnswer(){
       const val=(input.value||"").trim(); if (!val) return;
@@ -365,7 +393,7 @@
         showBanner(true, "정답입니다!");
         await sleep(NEXT_DELAY_MS);
         hideBanner();
-        nextProblem(true);           // 정답 → 다음 문제
+        nextProblem(true);
       } else {
         await handleWrongOrGiveUp();
       }
@@ -378,16 +406,16 @@
         showBanner(false, `틀렸습니다. 정답: ${curWord}`);
         await sleep(NEXT_DELAY_MS);
         hideBanner();
-        nextProblem(true);           // 시도 초과 → 다음 문제
+        nextProblem(true);
       } else {
         showBanner(false, "틀렸습니다!");
         await sleep(NEXT_DELAY_MS);
         hideBanner();
-        nextProblem(false);          // 오답 → 같은 문제 10% 느리게
+        nextProblem(false);   // 같은 문제 10% 느리게
       }
     }
 
-    // ====== 결과 저장/세션 종료 ======
+    // 저장/종료
     async function log({isCorrect, points}){
       try{
         await addDoc(collection(db,"results"), {
@@ -414,10 +442,11 @@
       }catch(e){ console.error("session save error", e); }
     }
 
-    // ====== 유틸 ======
+    // 유틸
     function rand(a,b){ return a + Math.random()*(b-a); }
     function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j]],[x[j],x[i]] } return x; }
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
   })().catch(e=>{
     console.error(e);
     document.getElementById('authPill').textContent='로딩 실패';
