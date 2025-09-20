@@ -155,7 +155,7 @@
               <th class="right">점수</th><th>제출</th>
             </tr>
           </thead>
-          <tbody id="liveTbody"></tbody>
+            <tbody id="liveTbody"></tbody>
         </table>
       </div>
     </section>
@@ -273,10 +273,7 @@
     const docId = ()=> `${(classIdEl.value||'').trim()}_${(setIdEl.value||'').trim()}`;
     const info = m => statusEl.textContent = m || '';
     const parseWords = (s)=> (s||'').replace(/[,\t]/g,' ').split(/\s+/).map(x=>x.trim()).filter(Boolean);
-    function ensureEditable(){
-      if(!CAN_EDIT){ alert('이 작업은 교사 계정만 가능합니다.'); return false; }
-      return true;
-    }
+    function ensureEditable(){ if(!CAN_EDIT){ alert('이 작업은 교사 계정만 가능합니다.'); return false; } return true; }
     const newRunId = ()=> (crypto?.randomUUID?.() || `run_${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
 
     async function readConfigOnce(){
@@ -285,7 +282,6 @@
       const s = await getDoc(doc(db,'configs',id));
       return s.exists()? s.data(): null;
     }
-
     function showRunId(v){ runIdView.textContent = v ? String(v) : '없음'; }
 
     /* ================= Auth ================= */
@@ -317,7 +313,7 @@
       try{
         await deleteDoc(doc(db,'configs',id));
         info('삭제 완료'); showRunId('');
-        reloadSetList();
+        reloadSetList(); bindLive(); refreshSum();
       }catch(e){ console.error(e); info('삭제 실패'); }
     });
 
@@ -342,7 +338,6 @@
           fastMax: Math.max(100, Number(fastMaxEl.value||520)),
           minFloor: Math.max(60, Number(minFloorEl.value||140)),
         },
-        // active/runId는 여기서 건드리지 않음
         public: !!isPublicEl.checked,
         updatedAt: new Date().toISOString()
       };
@@ -364,6 +359,7 @@
         await setDoc(doc(db,'configs',id), { active:true, runId, updatedAt:new Date().toISOString() }, { merge:true });
         showRunId(runId);
         info('세션 시작 (active=true)');
+        bindLive(); refreshSum();                      // ← 즉시 반영
       }catch(e){ console.error(e); info('세션 시작 실패'); }
     });
 
@@ -377,6 +373,7 @@
         await setDoc(doc(db,'configs',id), { active:true, runId, updatedAt:new Date().toISOString() }, { merge:true });
         showRunId(runId);
         info('새 runId 발급 완료 (이번 판 초기화)');
+        bindLive(); refreshSum();                      // ← 즉시 반영
       }catch(e){ console.error(e); info('runId 발급 실패'); }
     });
 
@@ -387,6 +384,7 @@
       try{
         await updateDoc(doc(db,'configs',id), { active:false });
         info('세션 중지 (active=false)');
+        bindLive(); refreshSum();
       }catch(e){ console.error(e); info('세션 중지 실패'); }
     });
 
