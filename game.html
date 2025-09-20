@@ -18,10 +18,13 @@
     .btn.warn{ background:#991b1b; border-color:#ef4444; }
     .btn:disabled{ opacity:.6; cursor:not-allowed; }
 
-    .track { position:relative; height:420px; margin:24px 0; border-radius:14px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.08); overflow:hidden; }
+    .track { position:relative; height:420px; margin:24px 0;
+             border-radius:14px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+             border:1px solid rgba(255,255,255,.08); overflow:hidden; }
     .guide { position:absolute; left:0; right:0; top:50%; height:1px; background:rgba(255,255,255,.08); }
     .word { position:relative; height:100%; pointer-events:none; }
-    .ch { position:absolute; transform:translateY(-50%); font-size:56px; font-weight:800; letter-spacing:.06em; white-space:pre; text-shadow:0 2px 6px rgba(0,0,0,.45); will-change:left, top; }
+    .ch { position:absolute; transform:translateY(-50%); font-size:56px; font-weight:800; letter-spacing:.06em; white-space:pre;
+          text-shadow:0 2px 6px rgba(0,0,0,.45); will-change:left, top; }
 
     .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
     .muted { color:#93a4b5; font-size:12px; }
@@ -29,11 +32,12 @@
     /* 배너/모달 레이어 우선순위: 배너 50, 모달 60 */
     .banner-wrap { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:50; }
     .banner-wrap.open { display:flex; }
-    .banner { min-width:320px; max-width:90vw; text-align:center; color:#fff; font-weight:900; font-size:24px; padding:18px 26px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); }
+    .banner { min-width:320px; max-width:90vw; text-align:center; color:#fff; font-weight:900; font-size:24px; padding:18px 26px;
+              border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); }
     .banner.ok { background:#1e40af; }
     .banner.no { background:#991b1b; }
 
-    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:60; } /* ↑ 60으로 */
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:60; }
     .modal.open { display:flex; }
     .modal .box { width:min(520px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
     .row { display:flex; gap:8px; align-items:center; }
@@ -299,7 +303,7 @@
       clearLetters(); letters = [];
       const H = track.clientHeight;
 
-      // ⬇️ 조각이 0개면 "건너뛰기" 금지 — 원문 1조각으로 진행
+      // 조각 0개 방지: 원문 1조각으로 대체
       let pieces = toPieces(word);
       if (pieces.length === 0) pieces = [String(word||'')];
 
@@ -362,7 +366,10 @@
     });
 
     function openModal(){
-      hideBanner();                              // ← 배너가 떠 있으면 먼저 닫아 클릭 막힘 방지
+      // 배너가 클릭을 가로막는 경우가 있어서 먼저 닫음
+      bannerWrap.classList.remove("open");
+      bannerWrap.setAttribute("aria-hidden","true");
+
       modal.classList.add("open");
       modal.setAttribute("aria-hidden","false");
       input.value="";
@@ -444,7 +451,15 @@
 
     // 유틸
     function rand(a,b){ return a + Math.random()*(b-a); }
-    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j]],[x[j],x[i]] } return x; }
+    function shuffle(a){
+      const x = a.slice();
+      for (let i = x.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        // ✅ 올바른 구조 분해 치환
+        [x[i], x[j]] = [x[j], x[i]];
+      }
+      return x;
+    }
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
   })().catch(e=>{
