@@ -30,7 +30,7 @@
 <body>
   <header>
     <div style="font-weight:800;">교사 대시보드</div>
-    <div id="meta" style="opacity:.85; font-size:13px; margin-top:4px;"></div>
+    <div id="meta" style="opacity:.85; font-size:13px; margin-top:4px;">인증 대기…</div>
   </header>
 
   <main>
@@ -45,23 +45,26 @@
           <input id="setId" placeholder="예: lesson1" />
         </div>
 
-        <!-- ▼ 추가된 '세트 목록' -->
+        <!-- 세트 목록 -->
         <div class="col" style="min-width:260px;flex:1;">
           <label>세트 목록(해당 classId의 configs)</label>
           <select id="setList">
-            <option value="">(classId 입력 후 새로고침 버튼 클릭)</option>
+            <option value="">(classId 입력 후 새로고침)</option>
           </select>
         </div>
 
-        <div class="col" style="min-width:220px;">
+        <div class="col" style="min-width:260px;">
           <label>&nbsp;</label>
           <div class="row">
             <button class="btn" id="btnRefresh">목록 새로고침</button>
             <button class="btn" id="btnLoad">불러오기</button>
-            <button class="btn red" id="btnDelete">삭제</button>
+            <button class="btn red" id="btnDelete" disabled>삭제</button>
           </div>
         </div>
       </div>
+
+      <div class="muted" id="roleInfo" style="margin-top:6px;">권한: 익명(학생) · 삭제/세션 제어 비활성화</div>
+      <div class="muted">로그인: <a href="teacher-login.html" style="color:#93c5fd;">teacher-login.html</a></div>
     </div>
 
     <div class="card">
@@ -94,8 +97,8 @@
       <div class="row" style="margin-top:16px;">
         <button class="btn" id="btnLoadByIds">입력값으로 불러오기</button>
         <button class="btn blue" id="btnSave">저장</button>
-        <button class="btn green" id="btnStart">세션 시작</button>
-        <button class="btn red" id="btnStop">세션 중지</button>
+        <button class="btn green" id="btnStart" disabled>세션 시작</button>
+        <button class="btn red" id="btnStop" disabled>세션 중지</button>
       </div>
 
       <div class="muted" style="margin-top:10px;">문서는 <code>configs/{classId}_{set}</code> 에 저장/삭제됩니다.</div>
@@ -109,9 +112,14 @@
       getFirestore, doc, getDoc, setDoc, deleteDoc,
       collection, query, where, getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getAuth, onAuthStateChanged, signInAnonymously
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // --- Firebase ---
+    // ✅ 교사 UID
+    const TEACHER_UIDS = ["5lgNILjYd9eOICKua6vbm1hcRny2"];
+
+    // Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCUmSDDcFn45Z_ZH3UigbsothE6iD21C7Y",
       authDomain: "grade-6-english-c17f3.firebaseapp.com",
@@ -124,8 +132,10 @@
     const db  = getFirestore(app);
     const auth = getAuth(app);
 
+    // elements
     const els = {
       meta: document.getElementById('meta'),
+      roleInfo: document.getElementById('roleInfo'),
       classId: document.getElementById('classId'),
       setId: document.getElementById('setId'),
       setList: document.getElementById('setList'),
@@ -150,7 +160,7 @@
     const docId = (c,s)=> `${c}_${s}`;
     const toast = (t)=> els.toast.textContent = t;
 
-    // 로컬 저장 (편의)
+    // 로컬 편의
     function saveLocal(){
       localStorage.setItem('teacher.classId', els.classId.value.trim());
       localStorage.setItem('teacher.setId', els.setId.value.trim());
@@ -161,14 +171,29 @@
     }
     loadLocal();
 
+    let isTeacher = false;
+
     onAuthStateChanged(auth, async (u)=>{
-      if (!u) { try { await signInAnonymously(auth); } catch(e){ console.error(e); } return; }
-      els.meta.textContent = `인증 완료 · ${new Date().toLocaleString("ko-KR")}`;
-      // 자동으로 목록 채우기
+      if (!u) {
+        // 비로그인 → 우선 익명으로라도 인증(읽기/저장 허용 용도)
+        try { await signInAnonymously(auth); } catch(e){ console.error(e); }
+        return;
+      }
+      // 권한 체크
+      isTeacher = TEACHER_UIDS.includes(u.uid);
+      els.meta.textContent = `인증됨: uid=${u.uid}${u.email? ' · '+u.email:''} · ${new Date().toLocaleString('ko-KR')}`;
+      els.roleInfo.textContent = isTeacher ? '권한: 교사 · 삭제/세션 제어 가능' : '권한: 익명/학생 · 삭제/세션 제어 비활성화';
+
+      // 버튼 권한 반영
+      els.btnDelete.disabled = !isTeacher;
+      els.btnStart.disabled = !isTeacher;
+      els.btnStop.disabled  = !isTeacher;
+
+      // 목록 자동 로드
       refreshList();
     });
 
-    // --- 세트 목록 채우기 ---
+    // 목록 채우기
     async function refreshList(){
       const c = els.classId.value.trim();
       if (!c){ toast('classId를 먼저 입력하세요.'); return; }
@@ -190,14 +215,13 @@
       }
     }
 
-    // --- 문서 불러오기 ---
+    // 불러오기
     async function loadConfig(c, s){
       if (!c || !s){ toast('classId, set을 입력하세요.'); return; }
       try{
         const snap = await getDoc(doc(db,'configs', docId(c,s)));
         if (!snap.exists()){ toast('문서가 없습니다.'); return; }
         const cfg = snap.data() || {};
-        // 양식 채우기
         els.classId.value = cfg.classId || c;
         els.setId.value = cfg.set || s;
         els.wordsBox.value = (Array.isArray(cfg.words)?cfg.words:[]).join('\n');
@@ -213,7 +237,7 @@
       }
     }
 
-    // --- 저장 ---
+    // 저장(+세션 시작/중지)
     async function saveConfig(activeFlag=null){
       const c = els.classId.value.trim();
       const s = els.setId.value.trim();
@@ -236,63 +260,54 @@
         },
         updatedAt: serverTimestamp()
       };
-      if (activeFlag!==null) cfg.active = !!activeFlag;
+      if (activeFlag!==null) {
+        if (!isTeacher) { toast('세션 시작/중지는 교사만 가능합니다.'); return; }
+        cfg.active = !!activeFlag;
+      }
 
       try{
         await setDoc(doc(db,'configs', docId(c,s)), cfg, { merge:true });
         toast(`저장 완료: ${docId(c,s)}${activeFlag!==null? ` (active=${cfg.active})` : ''}`);
         saveLocal();
-        // 저장 후 목록 갱신
         refreshList();
       }catch(e){
         console.error(e);
-        toast('저장 실패');
+        toast('저장 실패: ' + (e?.message || e));
       }
     }
 
-    // --- 삭제 ---
+    // 삭제
     async function deleteConfig(){
+      if (!isTeacher){ toast('삭제는 교사만 가능합니다.'); return; }
       const c = els.classId.value.trim();
-      const sFromSelect = els.setList.value;
-      const s = sFromSelect || els.setId.value.trim();
+      const s = (els.setList.value || els.setId.value.trim());
       if (!c || !s){ toast('삭제할 classId/set을 선택하세요.'); return; }
-
       const id = docId(c,s);
       if (!confirm(`정말 삭제할까요?\nconfigs/${id}`)) return;
-
       try{
         await deleteDoc(doc(db,'configs', id));
         toast(`삭제 완료: ${id}`);
-        // 삭제 후 비우거나 목록 갱신
         refreshList();
       }catch(e){
         console.error(e);
-        toast('삭제 실패');
+        toast('삭제 실패: ' + (e?.message || e));
       }
     }
 
-    // --- 이벤트 바인딩 ---
+    // 이벤트
     els.btnRefresh.addEventListener('click', refreshList);
-
     els.btnLoad.addEventListener('click', ()=>{
       const c = els.classId.value.trim();
       const s = els.setList.value || els.setId.value.trim();
       loadConfig(c,s);
     });
-
     els.btnLoadByIds.addEventListener('click', ()=>{
-      const c = els.classId.value.trim();
-      const s = els.setId.value.trim();
-      loadConfig(c,s);
+      loadConfig(els.classId.value.trim(), els.setId.value.trim());
     });
-
     els.btnSave.addEventListener('click', ()=> saveConfig(null));
     els.btnStart.addEventListener('click', ()=> saveConfig(true));
     els.btnStop.addEventListener('click', ()=> saveConfig(false));
-
     els.btnDelete.addEventListener('click', deleteConfig);
-
-    // classId 변경 후 엔터 → 목록 갱신
     els.classId.addEventListener('keydown', (e)=>{ if(e.key==='Enter') refreshList(); });
   </script>
 </body>
