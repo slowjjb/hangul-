@@ -157,12 +157,6 @@
     const sid     = p.get("sid") || "";
     const name    = p.get("name") || "제출원";
 
-    function updateHeaderMeta(runIdForView=runId){
-      document.getElementById("headerMeta").textContent =
-        `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · run=${runIdForView} · ${new Date().toLocaleString("ko-KR")}`;
-    }
-    updateHeaderMeta(0);
-
     const track = document.getElementById("track");
     const wordEl = document.getElementById("wordEl");
     const scoreEl = document.getElementById("score");
@@ -185,8 +179,8 @@
     let rounds = 0;
     let fastMin = 420, fastMax = 520, minFloor = 140;
 
-    // ⬇️ runId(세션 번호) 상태
-    let runId = 0;
+    // ⬇️ runId(이번 판 식별자): 문자열로 사용
+    let runId = "";
     let lastRunId = null;
 
     let user = null, running = false;
@@ -198,6 +192,12 @@
 
     // 진행에 쓰는 플레이리스트(중복 허용)
     let gameList = [];
+
+    function updateHeaderMeta(){
+      document.getElementById("headerMeta").textContent =
+        `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · run=${runId||"-"} · ${new Date().toLocaleString("ko-KR")}`;
+    }
+    updateHeaderMeta();
 
     // 자모 분해 / 문자 분해
     function decomposeToJamo(str){
@@ -223,7 +223,6 @@
       return /[가-힣]/.test(s) ? decomposeToJamo(s) : Array.from(s);
     }
 
-    // 플레이리스트(요청 라운드 수만큼 중복 허용 채움)
     function buildPlaylist(srcWords, n){
       const pool = (srcWords||[]).map(s=>String(s).trim()).filter(Boolean);
       if (pool.length===0 || n<=0) return [];
@@ -260,11 +259,12 @@
         }
         const cfg = snap.data()||{};
 
-        // ⬇️ runId 갱신
-        runId = Number(cfg.runId || 0);
-        updateHeaderMeta(runId);
+        // ⬇️ runId(문자열) 갱신
+        runId = String(cfg.runId || "");
+        updateHeaderMeta();
 
         words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
+
         const reqRounds = Math.max(1, Number(cfg.rounds||1));
         rounds = reqRounds;
         roundTotalEl.textContent = String(rounds);
@@ -276,12 +276,14 @@
 
         setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
 
-        // ⬇️ active이고 (처음시작이거나 runId가 바뀌면) 새 세션 시작
-        if (!cfg.active){
+        // active & runId가 있어야 시작
+        if (!cfg.active || !runId){
           stopAnim(); clearLetters(); running=false;
-          msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…";
+          msgEl.textContent = !cfg.active ? "세션이 중지됨. 시작을 기다리는 중…" : "runId가 아직 없습니다. 교사가 [세션 시작] 또는 [새 판]을 눌러주세요.";
           return;
         }
+
+        // 처음 시작이거나 runId가 바뀌면 리셋 후 시작
         if (!running || lastRunId !== runId){
           startSession();
           lastRunId = runId;
@@ -291,7 +293,6 @@
 
     // 세션 진행
     function startSession(){
-      // 이전 애니/화면 정리
       stopAnim(); clearLetters();
 
       totalScore = 0; scoreEl.textContent = "0";
@@ -451,8 +452,7 @@
       try{
         await addDoc(collection(db,"results"), {
           classId, set:setId, sid, name,
-          // ⬇️ runId 함께 기록 (집계 리셋용)
-          runId,
+          runId,                             // ← 이번 판 식별자
           word: curWord,
           attemptIndex: attemptIdx,
           isCorrect: !!isCorrect,
@@ -471,8 +471,7 @@
       try{
         await setDoc(doc(db,"sessions",[classId,setId,sid,Date.now()].join("_")), {
           classId, set:setId, sid, name,
-          // ⬇️ runId 함께 기록
-          runId,
+          runId,                             // ← 세션에도 기록
           totalPoints: totalScore,
           rounds,
           finishedAt: serverTimestamp()
