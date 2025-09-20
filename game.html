@@ -16,6 +16,7 @@
     .btn { border:1px solid #64748b; background:#111827; color:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600; }
     .btn.primary{ background:#2563eb; border-color:#2563eb; }
     .btn.warn{ background:#991b1b; border-color:#ef4444; }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
 
     .track {
       position:relative;
@@ -38,20 +39,34 @@
     }
 
     .panel { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px; }
-    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
+    .muted { color:#93a4b5; font-size:12px; }
+
+    /* 정답/오답 큰 배너 */
+    .banner-wrap {
+      position: fixed; inset:0; display:none; align-items:center; justify-content:center;
+      background: rgba(0,0,0,.35); z-index: 50;
+    }
+    .banner-wrap.open { display:flex; }
+    .banner {
+      min-width: 320px; max-width: 90vw; text-align:center;
+      color:#fff; font-weight:900; font-size:24px;
+      padding:18px 26px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.15);
+    }
+    .banner.ok { background:#1e40af; }     /* 파란색 */
+    .banner.no { background:#991b1b; }     /* 빨간색 */
+
+    /* 정답 입력 모달 */
+    .modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index: 40;}
     .modal.open { display:flex; }
     .modal .box { width:min(520px, 92vw); background:#0b1220; border:1px solid #334155; border-radius:12px; padding:16px; }
     .row { display:flex; gap:8px; align-items:center; }
     input[type="text"]{ width:100%; padding:10px 12px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#fff; font-size:16px; }
-    .muted { color:#93a4b5; font-size:12px; }
   </style>
 </head>
 <body>
   <header>
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div><strong>철자 게임</strong></div>
-      <button class="btn" onclick="location.href='join.html'">처음으로</button>
-    </div>
+    <div><strong>철자 게임</strong></div>
     <div id="headerMeta" class="meta">파라미터 인식 중…</div>
   </header>
 
@@ -64,6 +79,7 @@
       <span class="pill">평균 속도 <span id="speedNow">-</span> px/s</span>
       <button id="btnAnswer" class="btn primary">정답 입력(Enter)</button>
       <button id="btnGiveUp" class="btn warn">포기(Esc)</button>
+      <a class="btn" href="join.html">처음으로</a>
     </div>
 
     <div class="track panel" id="track">
@@ -73,9 +89,14 @@
 
     <div id="status" class="panel">
       <div id="message">교사가 세션을 시작하면 자동으로 시작합니다.</div>
-      <div class="muted" style="margin-top:6px;">configs/{classId}_{set} 또는 cfg 문서를 구독합니다.</div>
+      <div class="muted" style="margin-top:6px;">configs/{classId}_{set}를 구독합니다.</div>
     </div>
   </main>
+
+  <!-- 정답/오답 큰 배너 -->
+  <div id="bannerWrap" class="banner-wrap" aria-hidden="true">
+    <div id="banner" class="banner">정답입니다!</div>
+  </div>
 
   <!-- 정답 입력 모달 -->
   <div id="modal" class="modal" aria-hidden="true">
@@ -112,13 +133,12 @@
 
     /* ---------- URL 파라미터 ---------- */
     const p = new URLSearchParams(location.search);
-    const cfgId  = p.get("cfg");               // ✅ 공개 세트 문서 id (있으면 이것 우선)
     const classId = p.get("classId") || "";
-    const setId   = p.get("set") || "";        // (cfg가 없을 때만 사용)
+    const setId   = p.get("set") || "";
     const sid     = p.get("sid") || "";
     const name    = p.get("name") || "제출원";
     document.getElementById("headerMeta").textContent =
-      `cfg=${cfgId||"(없음)"} · classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · ${new Date().toLocaleString("ko-KR")}`;
+      `classId=${classId||"(없음)"} · set=${setId||"(없음)"} · sid=${sid||"(없음)"} · ${new Date().toLocaleString("ko-KR")}`;
 
     /* ---------- DOM ---------- */
     const track = document.getElementById("track");
@@ -130,13 +150,15 @@
     const msgEl = document.getElementById("message");
     const modal = document.getElementById("modal");
     const input = document.getElementById("answerInput");
+    const bannerWrap = document.getElementById("bannerWrap");
+    const banner = document.getElementById("banner");
 
     /* ---------- 규칙/상수 ---------- */
-    const pointsSeq = [10,8,6,4,2];  // 시도별 점수
+    const pointsSeq = [10,8,6,4,2];       // 시도별 점수
     const OUT_MARGIN = 420;
     const TOP_PADDING = 36;
     const START_JITTER = 0.45;
-    const NEXT_DELAY_MS = 2000;      // ✅ 정답/오답 처리 후 2초 지연
+    const NEXT_DELAY_MS = 2000;           // 정답/오답 배너 후 대기
 
     /* ---------- 상태 ---------- */
     let words = [];
@@ -146,8 +168,8 @@
     let user = null, running = false;
     let curIndex = -1, curWord = "", attemptIdx = 0;
     let totalScore = 0;
+    let speedScale = 1.0;
 
-    let speedScale = 1.0;   // 오답/포기 시 10% 감소
     let letters = [];
     let rafId = 0;
     let startTs = 0;
@@ -166,43 +188,30 @@
     });
 
     function setPill(id, t){ document.getElementById(id).textContent = t; }
-    function docId(){ return `${classId}_${setId}`; }
+    function cfgDocId(){ return `${classId}_${setId}`; }
 
     function subscribeConfig(){
-      if (cfgId) {
-        // ✅ 공개 세트 문서 직접 구독
-        onSnapshot(doc(db,"configs",cfgId), (snap)=>{
-          if (!snap.exists()){ setPill("cfgPill","설정 없음"); stopAnim(); clearLetters(); running=false; msgEl.textContent="공개 세트 문서가 없습니다."; return; }
-          applyConfig(snap.data());
-        }, (err)=>{ console.error(err); setPill("cfgPill","설정 오류"); });
-        return;
-      }
-
-      // (기존) classId + set 로 구독
       if (!classId || !setId){
-        msgEl.textContent = "cfg 또는 classId/set이 필요합니다. 예) ?cfg=문서id 또는 ?classId=6-1&set=lesson1&sid=01&name=민수";
+        msgEl.textContent = "URL에 classId, set이 필요합니다. 예) ?classId=6-1&set=lesson1&sid=01&name=민수";
         return;
       }
-      onSnapshot(doc(db,"configs",docId()), (snap)=>{
+      onSnapshot(doc(db,"configs",cfgDocId()), (snap)=>{
         if (!snap.exists()){ setPill("cfgPill","설정 없음"); stopAnim(); clearLetters(); running=false; msgEl.textContent="교사 설정 문서가 없습니다."; return; }
-        applyConfig(snap.data());
+        const cfg = snap.data()||{};
+        words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
+        const reqRounds = Math.max(1, Number(cfg.rounds||1));
+        rounds = Math.min(reqRounds, Math.max(1, words.length));
+        const sp=cfg.speedBase||{};
+        fastMin = Math.max(160, Number(sp.fastMin||420));
+        fastMax = Math.max(fastMin, Number(sp.fastMax||520));
+        minFloor= Math.max(120, Number(sp.minFloor||140));
+        roundTotalEl.textContent = String(rounds);
+
+        setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
+
+        if (!cfg.active){ stopAnim(); clearLetters(); running=false; msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…"; return; }
+        if (!running) startSession();
       }, (err)=>{ console.error(err); setPill("cfgPill","설정 오류"); });
-    }
-
-    function applyConfig(cfg){
-      words = (Array.isArray(cfg.words)?cfg.words:[]).map(s=>String(s).trim()).filter(Boolean);
-      const reqRounds = Math.max(1, Number(cfg.rounds||1));
-      rounds = Math.min(reqRounds, Math.max(1, words.length));
-      const sp = cfg.speedBase||{};
-      fastMin = Math.max(160, Number(sp.fastMin||420));
-      fastMax = Math.max(fastMin, Number(sp.fastMax||520));
-      minFloor= Math.max(120, Number(sp.minFloor||140));
-      roundTotalEl.textContent = String(rounds);
-
-      setPill("cfgPill", cfg.active ? "세션 활성" : "세션 중지");
-
-      if (!cfg.active){ stopAnim(); clearLetters(); running=false; msgEl.textContent="세션이 중지됨. 시작을 기다리는 중…"; return; }
-      if (!running) startSession();
     }
 
     /* ---------- 세션/문제 진행 ---------- */
@@ -223,6 +232,7 @@
         attemptIdx = 0;
         speedScale = 1.0;
       } else {
+        // 같은 문제 재시작: 속도 10% 감속(바닥 보장)
         speedScale = Math.max(minFloor / fastMax, speedScale * 0.9);
       }
       buildLetters(curWord);
@@ -241,10 +251,8 @@
         const el = document.createElement("span");
         el.className = "ch";
         el.textContent = word[i];
-
         const top = rand(TOP_PADDING, H - TOP_PADDING);
         el.style.top = top + "px";
-
         el.style.left = "-99999px";
         wordEl.appendChild(el);
 
@@ -252,24 +260,20 @@
         const baseSpeed = rand(fastMin, fastMax);
         const speed = Math.max(minFloor, baseSpeed * speedScale);
         const startTime = Math.random() * START_JITTER;
-
         letters.push({ el, side, speed, startTime, top });
       }
       const avg = Math.round(letters.reduce((s,l)=>s+l.speed,0)/Math.max(1,letters.length));
       speedNowEl.textContent = `${avg}`;
-
       startTs = performance.now();
     }
 
     function clearLetters(){ wordEl.innerHTML=""; letters=[]; }
-
-    /* ---------- 애니메이션 ---------- */
     function startAnim(){ stopAnim(); rafId=requestAnimationFrame(tick); }
     function stopAnim(){ if (rafId){ cancelAnimationFrame(rafId); rafId=0; } }
+
     function tick(now){
       const elapsed = (now - startTs)/1000;
       const W = track.clientWidth;
-
       let doneCount = 0;
       for (const L of letters){
         const t = elapsed - L.startTime;
@@ -288,7 +292,6 @@
         }
         L.el.style.left = x + "px";
       }
-
       if (doneCount >= letters.length){
         animFinished = true;
         stopAnim();
@@ -297,10 +300,11 @@
       rafId = requestAnimationFrame(tick);
     }
 
-    /* ---------- 입력/판정 ---------- */
+    /* ---------- 입력/판정 + 배너 ---------- */
     document.getElementById("btnAnswer").addEventListener("click", ()=> openModal());
     document.getElementById("submitAnswer").addEventListener("click", submitAnswer);
     document.getElementById("btnGiveUp").addEventListener("click", ()=> handleWrongOrGiveUp());
+
     window.addEventListener("keydown", (e)=>{
       if (e.key==="Enter"){ modal.classList.contains("open")?submitAnswer():openModal(); }
       else if (e.key==="Escape"){ modal.classList.contains("open")?closeModal():handleWrongOrGiveUp(); }
@@ -310,6 +314,17 @@
     function closeModal(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden","true"); }
     function normalize(s){ return String(s).toLowerCase().replace(/\s+/g,"").trim(); }
 
+    function showBanner(ok, text){
+      banner.className = "banner " + (ok? "ok" : "no");
+      banner.textContent = text;
+      bannerWrap.classList.add("open");
+      bannerWrap.setAttribute("aria-hidden","false");
+    }
+    function hideBanner(){
+      bannerWrap.classList.remove("open");
+      bannerWrap.setAttribute("aria-hidden","true");
+    }
+
     async function submitAnswer(){
       const val=(input.value||"").trim(); if (!val) return;
       closeModal();
@@ -318,25 +333,28 @@
         const pts = pointsSeq[Math.min(attemptIdx, pointsSeq.length-1)];
         totalScore += pts; scoreEl.textContent=String(totalScore);
         await log({isCorrect:true, points:pts});
-        msgEl.textContent = "정답입니다!";
-        await sleep(NEXT_DELAY_MS);     // ✅ 2초 대기
+        showBanner(true, "정답입니다!");
+        await sleep(NEXT_DELAY_MS);
+        hideBanner();
         nextProblem(true);
       } else {
-        await handleWrongOrGiveUp();
+        await handleWrongOrGiveUp(true);
       }
     }
 
-    async function handleWrongOrGiveUp(){
+    async function handleWrongOrGiveUp(cameFromWrong=false){
       await log({isCorrect:false, points:0});
       attemptIdx++;
       if (attemptIdx >= pointsSeq.length){
-        msgEl.textContent = "정답: " + curWord;
-        await sleep(NEXT_DELAY_MS);     // ✅ 2초 대기
+        showBanner(false, `틀렸습니다. 정답: ${curWord}`);
+        await sleep(NEXT_DELAY_MS);
+        hideBanner();
         nextProblem(true);
       } else {
-        msgEl.textContent = "틀렸습니다. 속도를 낮춰 다시 보여줍니다.";
-        await sleep(600);               // 짧은 안내 후
-        nextProblem(false);             // 같은 단어, 10% 감속
+        showBanner(false, "틀렸습니다!");
+        await sleep(NEXT_DELAY_MS);
+        hideBanner();
+        nextProblem(false); // 같은 단어, 10% 감속하여 재시작
       }
     }
 
@@ -344,8 +362,8 @@
     async function log({isCorrect, points}){
       try{
         await addDoc(collection(db,"results"), {
-          classId, set: setId, cfg: cfgId || null,
-          sid, name, word: curWord,
+          classId, set:setId, sid, name,
+          word: curWord,
           attemptIndex: attemptIdx,
           isCorrect: !!isCorrect,
           points: Number(points||0),
@@ -357,18 +375,23 @@
 
     async function endSession(){
       running=false; stopAnim(); clearLetters();
+      showBanner(true, `세트 종료! 총점: ${totalScore}`);
+      await sleep(1500);
+      hideBanner();
       msgEl.textContent = "세트 종료! 총점: " + totalScore;
       try{
-        await setDoc(doc(db,"sessions",[classId,(cfgId||setId||'noSet'),sid,Date.now()].join("_")), {
-          classId, set: setId, cfg: cfgId || null, sid, name,
-          totalPoints: totalScore, rounds, finishedAt: serverTimestamp()
+        await setDoc(doc(db,"sessions",[classId,setId,sid,Date.now()].join("_")), {
+          classId, set:setId, sid, name,
+          totalPoints: totalScore,
+          rounds,
+          finishedAt: serverTimestamp()
         });
       }catch(e){ console.error("session save error", e); }
     }
 
     /* ---------- 유틸 ---------- */
     function rand(a,b){ return a + Math.random()*(b-a); }
-    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]];} return x; }
+    function shuffle(a){ const x=a.slice(); for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j]], [x[j],x[i]] } return x; }
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
   </script>
 </body>
